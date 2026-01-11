@@ -10,304 +10,297 @@
 //
 //  P Dev on 30.04.2025.
 //
-
 import SwiftUI
-import UserNotifications
-import Observation
-import Combine
+import AVFoundation
 
-// MARK: - Data Model
-enum HabitType: String, CaseIterable, Codable {
-    case postureCheck = "Posture Check"
-    case movementBreak = "Movement Break"
-    case deskExercise = "Desk Exercise"
-    case standingInterval = "Standing Interval"
-    case hydrationReminder = "Hydration Reminder"
-}
+// 1. App State Machine
+enum AppState {
+    case scanning
+    case result(score: Int, image: Image?)
+    case paywall
 
-@Observable
-class Habit: Identifiable, Codable {
-    let id: UUID
-    let type: HabitType
-    var interval: TimeInterval
-    var isEnabled: Bool
-    var notificationIDs: [String]
-
-    // Timer tracking properties (not Codable)
-    var lastReset: Date = Date()
-
-    init(id: UUID, type: HabitType, interval: TimeInterval, isEnabled: Bool, notificationIDs: [String]) {
-        self.id = id
-        self.type = type
-        self.interval = interval
-        self.isEnabled = isEnabled
-        self.notificationIDs = notificationIDs
-    }
-
-    func timeRemaining(from date: Date = Date()) -> TimeInterval {
-        max(0, interval - date.timeIntervalSince(lastReset))
+    var isScanning: Bool {
+        if case .scanning = self { return true }
+        return false
     }
 }
 
-@Observable
-class HabitStore {
-    var habits: [Habit] = []
-    var tick = 0 // Dummy property for forcing updates
+struct ContentView: View {
+    @StateObject private var engine = PostureEngine()
+    @State private var appState: AppState = .scanning
+    @State private var scanDuration: Double = 0.0
+    @State private var feedbackGenerator = UINotificationFeedbackGenerator()
 
-    private var timer: AnyCancellable?
-
-    init() {
-        loadDefaultHabits()
-        startTimer()
-    }
-
-    private func loadDefaultHabits() {
-        let defaultHabits = [
-            Habit(id: UUID(), type: .postureCheck, interval: 1800, isEnabled: true, notificationIDs: []),
-            Habit(id: UUID(), type: .movementBreak, interval: 1800, isEnabled: true, notificationIDs: []),
-            Habit(id: UUID(), type: .deskExercise, interval: 3600, isEnabled: true, notificationIDs: []),
-            Habit(id: UUID(), type: .standingInterval, interval: 7200, isEnabled: true, notificationIDs: []),
-            Habit(id: UUID(), type: .hydrationReminder, interval: 2700, isEnabled: true, notificationIDs: [])
-        ]
-
-        habits = defaultHabits
-    }
-
-    private func startTimer() {
-        timer = Timer.publish(every: 1, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                self?.tick += 1
-            }
-    }
-
-    func resetHabit(_ habit: Habit) {
-        if let index = habits.firstIndex(where: { $0.id == habit.id }) {
-            habits[index].lastReset = Date()
-        }
-    }
-}
-
-// MARK: - Notification Manager
-class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
-    static let shared = NotificationManager()
-    var habitStore: HabitStore?
-
-    override init() {
-        super.init()
-        UNUserNotificationCenter.current().delegate = self
-    }
-
-    func requestAuthorization() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { success, error in
-            if success {
-                print("Notification authorization granted")
-            } else if let error {
-                print("Authorization error: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    func scheduleHabitNotification(_ habit: Habit) {
-        guard let habitStore else { return }
-
-        let content = UNMutableNotificationContent()
-        content.title = "Time for \(habit.type.rawValue)"
-        content.sound = .default
-
-        let trigger = UNTimeIntervalNotificationTrigger(
-            timeInterval: habit.interval,
-            repeats: true
-        )
-
-        let requestID = UUID().uuidString
-        let request = UNNotificationRequest(
-            identifier: requestID,
-            content: content,
-            trigger: trigger
-        )
-
-        UNUserNotificationCenter.current().add(request) { error in
-            if error == nil {
-                DispatchQueue.main.async {
-                    if let index = habitStore.habits.firstIndex(where: { $0.id == habit.id }) {
-                        habitStore.habits[index].notificationIDs.append(requestID)
-                    }
-                }
-            }
-        }
-    }
-
-    func cancelNotifications(for habit: Habit) {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: habit.notificationIDs)
-    }
-
-    func updateNotifications(for habit: Habit) {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: habit.notificationIDs)
-        // Clear the IDs after removing
-        if let store = habitStore,
-           let index = store.habits.firstIndex(where: { $0.id == habit.id }) {
-            store.habits[index].notificationIDs.removeAll()
-        }
-    }
-
-    func triggerTestNotification(for habit: Habit) {
-        let content = UNMutableNotificationContent()
-        content.title = "Test: \(habit.type.rawValue)"
-        content.sound = .default
-
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
-
-        UNUserNotificationCenter.current().add(request)
-    }
-}
-
-// MARK: - UI Components
-struct HabitListView: View {
-    @Environment(HabitStore.self) private var habitStore
+    // Timer for the "Scan" phase
+    let scanTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    let synthesizer = AVSpeechSynthesizer()
 
     var body: some View {
-        NavigationStack {
-            List {
-                ForEach(habitStore.habits) { habit in
-                    HabitRowView(habit: habit)
-                }
+        ZStack {
+            // LAYER 1: The Camera Feed (Always visible in background)
+            CameraPreview(session: engine.captureSession)
+                .ignoresSafeArea()
+                .overlay(Color.black.opacity(appState.isScanning ? 0.2 : 0.8))
+                .blur(radius: appState.isScanning ? 0 : 10)
+
+            // LAYER 2: The "Magic" Lines (Only during scanning)
+            if case .scanning = appState, engine.isLocked, let points = engine.normalizedPoints {
+                PostureOverlay(points: points, angle: engine.headAngle)
             }
-            .navigationTitle("Health Habits")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink("Settings") {
-                        SettingsView()
+
+            // LAYER 3: The UI Overlay
+            VStack {
+                // Top Bar
+                HStack {
+                    Image(systemName: "figure.mind.and.body")
+                        .foregroundColor(.white)
+                    Text("DeskWellness")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    Spacer()
+                    if case .scanning = appState {
+                        Text(engine.isLocked ? "LOCKED" : "SCANNING...")
+                            .font(.caption)
+                            .padding(6)
+                            .background(engine.isLocked ? Color.green : Color.gray)
+                            .cornerRadius(8)
+                            .foregroundColor(.white)
+                    }
+                }
+                .padding()
+
+                Spacer()
+
+                // Bottom Area Changes based on State
+                switch appState {
+                case .scanning:
+                    ScanningView(angle: engine.headAngle, isLocked: engine.isLocked)
+                case .result(let score, _):
+                    ResultView(score: score) {
+                        // Action: Go to Paywall
+                        withAnimation { appState = .paywall }
+                    }
+                case .paywall:
+                    PaywallView {
+                        // Action: Reset
+                        appState = .scanning
+                        scanDuration = 0
+                        engine.start()
                     }
                 }
             }
         }
+        .onAppear { engine.start() }
+        .onReceive(scanTimer) { _ in
+            if case .scanning = appState, engine.isLocked {
+                scanDuration += 1
+                // Auto-finish scan after 5 seconds of good data
+                if scanDuration >= 5 {
+                    finishScan()
+                }
+            }
+            
+            if engine.isLocked {
+                if scanDuration == 0 { speak("Hold still.") }
+                if scanDuration == 3 { speak("Done.") }
+            } else {
+                // Debounce this so it doesn't spam
+                if Int(Date().timeIntervalSince1970) % 3 == 0 {
+                    speak("I can't see your side profile.")
+                }
+            }
+        }
+    }
+
+    func speak(_ text: String) {
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.rate = 0.5
+        synthesizer.speak(utterance)
+    }
+
+    func finishScan() {
+        // Calculate Score (0-100) based on angle
+        // Angle > 30 is bad (Score 40). Angle < 10 is perfect (Score 100).
+        let angle = engine.headAngle
+        // If angle is 0 (Perfect), Score = 100.
+        // If angle is 45 (Bad), Score = 100 - 90 = 10.
+
+        let score = Int(max(0, min(100, 100 - (angle * 2))))
+
+        feedbackGenerator.notificationOccurred(.success)
+        withAnimation {
+            appState = .result(score: score, image: nil)
+        }
+        engine.stop() // Freeze camera
     }
 }
 
-struct HabitRowView: View {
-    let habit: Habit
-    @Environment(HabitStore.self) private var habitStore
-    @State private var now = Date()
+// MARK: - Subviews for the "Wow" Effect
 
+struct PostureOverlay: View {
+    let points: (ear: CGPoint, shoulder: CGPoint)
+    let angle: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            let ear = CGPoint(x: points.ear.x * geo.size.width, y: points.ear.y * geo.size.height)
+            let shoulder = CGPoint(x: points.shoulder.x * geo.size.width, y: points.shoulder.y * geo.size.height)
+
+            // The "Lightsaber" Line
+            Path { path in
+                path.move(to: shoulder)
+                path.addLine(to: ear)
+            }
+            .stroke(
+                LinearGradient(
+                    gradient: Gradient(colors: getColors(angle: angle)),
+                    startPoint: .bottom, endPoint: .top
+                ),
+                style: StrokeStyle(lineWidth: 6, lineCap: .round)
+            )
+            .shadow(color: getColors(angle: angle).last!, radius: 15) // MAXIMUM GLOW
+
+            // The Joints
+            Circle().fill(.white).frame(width: 12).position(ear).shadow(radius: 5)
+            Circle().fill(.white).frame(width: 12).position(shoulder)
+        }
+    }
+
+    func getColors(angle: Double) -> [Color] {
+        if angle > 25 { return [.red, .orange] }
+        return [.cyan, .blue] // "Wow" Colors
+    }
+}
+
+struct ScanningView: View {
+    let angle: Double
+    let isLocked: Bool
+
+    var body: some View {
+        if isLocked {
+            VStack(spacing: 4) {
+                Text(String(format: "%.0f°", angle))
+                    .font(.system(size: 72, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                Text(angle > 25 ? "HEAD FORWARD" : "GOOD ALIGNMENT")
+                    .font(.headline)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(angle > 25 ? Color.red : Color.blue)
+                    .cornerRadius(20)
+                    .foregroundColor(.white)
+            }
+            .padding(.bottom, 60)
+            .transition(.scale)
+        } else {
+            Text("Turn side-on to camera")
+                .font(.title2)
+                .foregroundColor(.white.opacity(0.8))
+                .padding(.bottom, 60)
+                .transition(.opacity)
+        }
+    }
+}
+
+struct ResultView: View {
+    let score: Int
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            // The "Score Card"
+            VStack(spacing: 10) {
+                Text("Your Desk Score")
+                    .textCase(.uppercase)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+
+                ZStack {
+                    Circle()
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 10)
+                        .frame(width: 120, height: 120)
+                    Circle()
+                        .trim(from: 0, to: CGFloat(score) / 100)
+                        .stroke(score > 80 ? Color.green : Color.orange, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 120, height: 120)
+                    Text("\(score)")
+                        .font(.system(size: 40, weight: .bold))
+                        .foregroundColor(.white)
+                }
+
+                Text(score > 80 ? "Great Posture" : "Requires Correction")
+                    .font(.headline)
+                    .foregroundColor(.white)
+            }
+            .padding(30)
+            .background(Color.black.opacity(0.8)) // Glass effect
+            .cornerRadius(20)
+
+            // The "Sell" Button
+            Button(action: onContinue) {
+                Text("See How to Fix This")
+                    .font(.headline)
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.white)
+                    .cornerRadius(12)
+            }
+            .padding(.horizontal, 40)
+        }
+        .padding(.bottom, 40)
+        .transition(.move(edge: .bottom))
+    }
+}
+
+struct PaywallView: View {
+    let onReset: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Unlock the 12-Week Clinic")
+                .font(.title)
+                .bold()
+                .foregroundColor(.white)
+
+            VStack(alignment: .leading, spacing: 10) {
+                FeatureRow(icon: "checkmark.circle.fill", text: "Daily 5-min Correction Plan")
+                FeatureRow(icon: "checkmark.circle.fill", text: "Real-time AI Posture Alerts")
+                FeatureRow(icon: "checkmark.circle.fill", text: "Pain Relief Tracking")
+            }
+            .padding()
+
+            Button(action: { /* Integrate RevenueCat Here */ }) {
+                Text("Start 7-Day Free Trial")
+                    .bold()
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+            }
+            .padding(.horizontal)
+
+            Button("Retake Scan", action: onReset)
+                .foregroundColor(.gray)
+                .padding(.top)
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(Color(UIColor.systemBackground))
+        .cornerRadius(20)
+        .transition(.move(edge: .bottom))
+    }
+}
+
+struct FeatureRow: View {
+    let icon: String
+    let text: String
     var body: some View {
         HStack {
-            VStack(alignment: .leading) {
-                Text(habit.type.rawValue)
-                    .font(.headline)
-                Text("Every \(formattedInterval(habit.interval))")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                if habit.isEnabled {
-                    Text("Next in: \(formattedInterval(habit.timeRemaining(from: now)))")
-                        .font(.caption)
-                        .foregroundStyle(.blue)
-                }
-            }
-            Spacer()
-            Toggle("", isOn: Binding(
-                get: { habit.isEnabled },
-                set: { newValue in
-                    if let index = habitStore.habits.firstIndex(where: { $0.id == habit.id }) {
-                        habitStore.habits[index].isEnabled = newValue
-                        if newValue {
-                            habitStore.habits[index].lastReset = Date()
-                            NotificationManager.shared.scheduleHabitNotification(habit)
-                        } else {
-                            NotificationManager.shared.cancelNotifications(for: habit)
-                        }
-                    }
-                }
-            ))
-        }
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { date in
-            now = date
+            Image(systemName: icon).foregroundColor(.green)
+            Text(text).foregroundColor(.primary)
         }
     }
-
-    private func formattedInterval(_ interval: TimeInterval) -> String {
-        let formatter = DateComponentsFormatter()
-        formatter.unitsStyle = .short
-        formatter.allowedUnits = [.hour, .minute, .second]
-        formatter.zeroFormattingBehavior = .pad
-        return formatter.string(from: interval) ?? ""
-    }}
-
-// MARK: - Settings View
-struct SettingsView: View {
-    @Environment(HabitStore.self) private var habitStore
-
-    var body: some View {
-        Form {
-            Section {
-                ForEach(habitStore.habits) { habit in
-                    NavigationLink {
-                        HabitDetailView(habit: habit)
-                    } label: {
-                        Text(habit.type.rawValue)
-                    }
-                }
-            } header: {
-                Text("Notification Settings")
-            }
-        }
-        .navigationTitle("Settings")
-    }
-}
-
-struct HabitDetailView: View {
-    @Bindable var habit: Habit
-    @Environment(HabitStore.self) private var habitStore
-
-    var body: some View {
-        Form {
-            Section {
-                Picker("Interval", selection: $habit.interval) {
-                    Text("30 minutes").tag(1800.0)
-                    Text("1 hour").tag(3600.0)
-                    Text("2 hours").tag(7200.0)
-                    Text("Custom").tag(900.0)
-                }
-                .onChange(of: habit.interval) { _ in
-                    habitStore.resetHabit(habit)
-                }
-
-                if habit.interval == 900 {
-                    Stepper("Custom interval: \(formattedInterval(habit.interval))",
-                            value: $habit.interval,
-                            in: 300...10800,
-                            step: 300)
-                    .onChange(of: habit.interval) { _ in
-                        habitStore.resetHabit(habit)
-                    }
-                }
-            } header: {
-                Text("Timing")
-            }
-
-            Section {
-                Button("Test Notification") {
-                    NotificationManager.shared.triggerTestNotification(for: habit)
-                }
-            }
-        }
-        .navigationTitle(habit.type.rawValue)
-        .onDisappear {
-            NotificationManager.shared.updateNotifications(for: habit)
-        }
-    }
-
-    private func formattedInterval(_ interval: TimeInterval) -> String {
-        let formatter = DateComponentsFormatter()
-        formatter.unitsStyle = .abbreviated
-        formatter.allowedUnits = [.hour, .minute]
-        return formatter.string(from: interval) ?? ""
-    }
-}
-
-// MARK: - Preview
-#Preview {
-    HabitListView()
-        .environment(HabitStore())
 }
