@@ -38,12 +38,16 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
     // General
     @Published var confidence: Double = 0.0
     
-    // MARK: - Internal Math State (Smoothing)
+    // MARK: - Internal Math State (Smoothing & Stability)
     private var previousLeftShoulder: CGPoint?
     private var previousRightShoulder: CGPoint?
     private var previousNose: CGPoint?
     private var previousEar: CGPoint?
     private var previousNeck: CGPoint?
+    
+    // Missed frame counters for hysteresis
+    private var frontMissedFrames: Int = 0
+    private var sideMissedFrames: Int = 0
     
     // Lower alpha = more stable but slower. Higher = faster but jittery.
     private let smoothingAlpha: CGFloat = 0.3
@@ -74,6 +78,7 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
             self.isSideLocked = false
             self.previousEar = nil
             self.previousNeck = nil
+            self.sideMissedFrames = 0
         }
     }
     
@@ -84,6 +89,7 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
             self.previousLeftShoulder = nil
             self.previousRightShoulder = nil
             self.previousNose = nil
+            self.frontMissedFrames = 0
         }
     }
     
@@ -98,6 +104,8 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
             self.forwardHeadAngle = 0
             self.frontPoints = nil
             self.sidePoints = nil
+            self.frontMissedFrames = 0
+            self.sideMissedFrames = 0
         }
     }
 
@@ -151,9 +159,17 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
               leftShoulder.confidence > 0.5,
               rightShoulder.confidence > 0.5,
               nose.confidence > 0.5 else {
-            DispatchQueue.main.async { self.isFrontLocked = false }
+            
+            // Frame Missed Logic
+            frontMissedFrames += 1
+            if frontMissedFrames > PostureConstants.missedFrameTolerance {
+                DispatchQueue.main.async { self.isFrontLocked = false }
+            }
             return
         }
+        
+        // Frame Hit Logic
+        frontMissedFrames = 0
         
         // Convert to CGPoint (0..1) - flip Y
         let rawLeftShoulder = CGPoint(x: leftShoulder.location.x, y: 1 - leftShoulder.location.y)
@@ -237,9 +253,17 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
         }
 
         guard let earPoint = ear, let rawNeck = neckPoint else {
-            DispatchQueue.main.async { self.isSideLocked = false }
+            
+            // Frame Missed Logic (Side)
+            sideMissedFrames += 1
+            if sideMissedFrames > PostureConstants.missedFrameTolerance {
+                DispatchQueue.main.async { self.isSideLocked = false }
+            }
             return
         }
+        
+        // Frame Hit Logic (Side)
+        sideMissedFrames = 0
 
         let rawEar = CGPoint(x: earPoint.location.x, y: 1 - earPoint.location.y)
 

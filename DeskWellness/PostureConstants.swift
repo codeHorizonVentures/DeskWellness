@@ -38,6 +38,11 @@ enum PostureConstants {
     /// Maximum acceptable head lateral tilt (degrees)
     static let maxHeadTilt: Double = 3.0
     
+    // MARK: - Stability
+    
+    /// Number of consecutive missed frames to tolerate before unlocking (approx. 0.5s at 30fps)
+    static let missedFrameTolerance: Int = 15
+    
     // MARK: - Timing
     
     /// Duration (seconds) of stable tracking before auto-finishing scan
