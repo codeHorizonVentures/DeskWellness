@@ -28,27 +28,27 @@ struct MagicMirrorView: View {
                 .ignoresSafeArea()
 
             // 3. The "Wow" Visualization Layer
-            if let points = engine.normalizedPoints, engine.isLocked {
+            if let points = engine.sidePoints, engine.isSideLocked {
                 GeometryReader { geo in
                     let ear = CGPoint(x: points.ear.x * geo.size.width, y: points.ear.y * geo.size.height)
-                    let shoulder = CGPoint(x: points.shoulder.x * geo.size.width, y: points.shoulder.y * geo.size.height)
+                    let neck = CGPoint(x: points.neck.x * geo.size.width, y: points.neck.y * geo.size.height)
 
-                    // The Glowing Line
+                    // The Glowing Line (Tragus to C7)
                     Path { path in
-                        path.move(to: shoulder)
+                        path.move(to: neck)
                         path.addLine(to: ear)
                     }
                     .stroke(
                         LinearGradient(
-                            gradient: Gradient(colors: PostureConstants.colors(for: engine.headAngle)),
+                            gradient: Gradient(colors: PostureConstants.colorsForCVA(engine.cva)),
                             startPoint: .bottom,
                             endPoint: .top
                         ),
                         style: StrokeStyle(lineWidth: 6, lineCap: .round)
                     )
-                    .shadow(color: PostureConstants.colors(for: engine.headAngle).last!, radius: 10)
+                    .shadow(color: PostureConstants.colorsForCVA(engine.cva).last!, radius: 10)
 
-                    // The Joints (Premium Polish)
+                    // The Joints
                     Circle()
                         .fill(Color.white)
                         .frame(width: 12, height: 12)
@@ -58,7 +58,7 @@ struct MagicMirrorView: View {
                     Circle()
                         .fill(Color.white)
                         .frame(width: 12, height: 12)
-                        .position(shoulder)
+                        .position(neck)
                 }
             }
 
@@ -66,15 +66,15 @@ struct MagicMirrorView: View {
             VStack {
                 Spacer()
 
-                if engine.isLocked {
+                if engine.isSideLocked {
                     VStack(spacing: 8) {
-                        Text(String(format: "%.0f°", engine.headAngle))
+                        Text(String(format: "%.0f°", engine.forwardHeadAngle))
                             .font(.system(size: 64, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
 
-                        Text(PostureConstants.feedbackText(for: engine.headAngle))
+                        Text(PostureConstants.feedbackText(for: engine.forwardHeadAngle))
                             .font(.headline)
-                            .foregroundColor(PostureConstants.colors(for: engine.headAngle).last!)
+                            .foregroundColor(PostureConstants.colors(for: engine.forwardHeadAngle).last!)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
                             .background(Color.black.opacity(0.6))
@@ -82,7 +82,7 @@ struct MagicMirrorView: View {
                     }
                     .padding(.bottom, 50)
                     .transition(.opacity.animation(.easeInOut))
-                    .onChange(of: engine.headAngle) { oldAngle, newAngle in
+                    .onChange(of: engine.forwardHeadAngle) { oldAngle, newAngle in
                         triggerHaptic(oldAngle: oldAngle, newAngle: newAngle)
                     }
                 } else {

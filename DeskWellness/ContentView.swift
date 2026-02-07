@@ -11,25 +11,44 @@ import AVFoundation
 // MARK: - App State Machine
 
 enum AppState {
-    case scanning
-    case result(score: Int, image: Image?)
+    case frontScanning              // Phase 1: Front-facing detection
+    case frontResult(FrontScore)    // Show front results, prompt for side if needed
+    case sideScanning               // Phase 2: Side profile detection (optional)
+    case finalResult(FinalScore)    // Combined score
     case paywall
 
     var isScanning: Bool {
-        if case .scanning = self { return true }
-        return false
+        switch self {
+        case .frontScanning, .sideScanning: return true
+        default: return false
+        }
     }
+}
+
+struct FrontScore {
+    let shoulderTilt: Double    // ° asymmetry
+    let headTilt: Double        // ° offset
+    let score: Int              // 0-100
+    let needsSideScan: Bool     // Forward head suspected?
+}
+
+struct FinalScore {
+    let frontScore: FrontScore
+    let cva: Double?                // Craniovertebral Angle (nil if skipped)
+    let forwardHeadAngle: Double?   // Legacy: nil if side scan skipped
+    let combinedScore: Int
 }
 
 // MARK: - Main Content View
 
 struct ContentView: View {
     @StateObject private var engine = PostureEngine()
-    @State private var appState: AppState = .scanning
+    @State private var appState: AppState = .frontScanning
     @State private var scanDuration: Double = 0.0
     @State private var feedbackGenerator = UINotificationFeedbackGenerator()
     @State private var lastSpeechTime: Date = .distantPast
     @State private var showCameraPermissionAlert = false
+    @State private var frontScore: FrontScore? = nil
 
     let scanTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     let synthesizer = AVSpeechSynthesizer()
@@ -42,46 +61,73 @@ struct ContentView: View {
                 .overlay(Color.black.opacity(appState.isScanning ? 0.2 : 0.8))
                 .blur(radius: appState.isScanning ? 0 : 10)
 
-            // LAYER 2: The "Magic" Lines (Only during scanning)
-            if case .scanning = appState, engine.isLocked, let points = engine.normalizedPoints {
-                PostureOverlay(points: points, angle: engine.headAngle)
+            // LAYER 2: Scanning Effects
+            if case .frontScanning = appState, engine.isFrontLocked, let points = engine.frontPoints {
+                FrontScanningEffectsView(
+                    points: points,
+                    isLocked: engine.isFrontLocked,
+                    showDebug: PostureConstants.showDebugOverlay
+                )
+            }
+            
+            if case .sideScanning = appState, engine.isSideLocked, let points = engine.sidePoints {
+                ScanningEffectsView(
+                    points: points,
+                    isLocked: engine.isSideLocked,
+                    showDebug: PostureConstants.showDebugOverlay
+                )
             }
 
             // LAYER 3: The UI Overlay
             VStack {
                 // Top Bar
-                HStack {
-                    Image(systemName: "figure.mind.and.body")
-                        .foregroundColor(.white)
-                    Text("DeskWellness")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    Spacer()
-                    if case .scanning = appState {
-                        Text(engine.isLocked ? "LOCKED" : "SCANNING...")
-                            .font(.caption)
-                            .padding(6)
-                            .background(engine.isLocked ? Color.green : Color.gray)
-                            .cornerRadius(8)
-                            .foregroundColor(.white)
-                    }
-                }
-                .padding()
+                TopBarView(appState: appState, engine: engine)
 
                 Spacer()
 
                 // Bottom Area Changes based on State
                 switch appState {
-                case .scanning:
-                    ScanningView(angle: engine.headAngle, isLocked: engine.isLocked)
-                case .result(let score, _):
-                    ResultView(score: score) {
+                case .frontScanning:
+                    FrontScanningView(
+                        shoulderTilt: engine.shoulderTilt,
+                        headTilt: engine.headTilt,
+                        isLocked: engine.isFrontLocked
+                    )
+                    
+                case .frontResult(let score):
+                    FrontResultView(score: score) {
+                        // User wants side scan - restart camera and switch mode
+                        engine.switchToSideMode()
+                        engine.start()
+                        scanDuration = 0
+                        withAnimation { appState = .sideScanning }
+                    } onSkip: {
+                        // Skip side scan, go to final result
+                        let final = FinalScore(
+                            frontScore: score,
+                            cva: nil,
+                            forwardHeadAngle: nil,
+                            combinedScore: score.score
+                        )
+                        withAnimation { appState = .finalResult(final) }
+                    }
+                    
+                case .sideScanning:
+                    SideScanningView(
+                        cva: engine.cva,
+                        isLocked: engine.isSideLocked
+                    )
+                    
+                case .finalResult(let score):
+                    FinalResultView(score: score) {
                         withAnimation { appState = .paywall }
                     }
+                    
                 case .paywall:
                     PaywallView {
-                        appState = .scanning
+                        engine.reset()
                         scanDuration = 0
+                        appState = .frontScanning
                         engine.start()
                     }
                 }
@@ -143,88 +189,267 @@ struct ContentView: View {
     // MARK: - Scan Timer Logic
 
     private func handleScanTimer() {
-        guard case .scanning = appState else { return }
-
-        if engine.isLocked {
+        switch appState {
+        case .frontScanning:
+            handleFrontScan()
+        case .sideScanning:
+            handleSideScan()
+        default:
+            break
+        }
+    }
+    
+    private func handleFrontScan() {
+        if engine.isFrontLocked {
             scanDuration += 1
-
+            
             if scanDuration == 1 {
                 speakDebounced("Hold still.")
-            } else if scanDuration == 3 {
-                speakDebounced("Done.")
             }
-
+            
             if scanDuration >= PostureConstants.scanLockDuration {
-                finishScan()
+                finishFrontScan()
+            }
+        }
+    }
+    
+    private func handleSideScan() {
+        if engine.isSideLocked {
+            scanDuration += 1
+            
+            if scanDuration == 1 {
+                speakDebounced("Hold still.")
+            }
+            
+            if scanDuration >= PostureConstants.scanLockDuration {
+                finishSideScan()
             }
         } else {
-            speakDebounced("I can't see your side profile.")
+            speakDebounced("Turn sideways to the camera.")
         }
     }
 
-    private func finishScan() {
-        let score = PostureConstants.score(for: engine.headAngle)
-
+    private func finishFrontScan() {
+        // Calculate front score
+        let shoulderScore = max(0, 100 - abs(engine.shoulderTilt) * 5) // -5 per degree
+        let headScore = max(0, 100 - abs(engine.headTilt) * 3)         // -3 per degree offset
+        let combinedFrontScore = Int((shoulderScore + headScore) / 2)
+        
+        // Determine if side scan is needed (if front posture is reasonably good)
+        // Only suggest side scan if front is okay but we want more precision
+        let needsSide = combinedFrontScore > 60 // Good front posture, check for forward head
+        
+        let score = FrontScore(
+            shoulderTilt: engine.shoulderTilt,
+            headTilt: engine.headTilt,
+            score: combinedFrontScore,
+            needsSideScan: needsSide
+        )
+        
+        frontScore = score
         feedbackGenerator.notificationOccurred(.success)
-        withAnimation {
-            appState = .result(score: score, image: nil)
-        }
         engine.stop()
+        
+        withAnimation {
+            appState = .frontResult(score)
+        }
+    }
+    
+    private func finishSideScan() {
+        guard let front = frontScore else { return }
+        
+        // Use CVA-based scoring (clinical methodology)
+        let cvaScore = PostureConstants.cvaScore(for: engine.cva)
+        let combinedScore = (front.score + cvaScore) / 2
+        
+        let final = FinalScore(
+            frontScore: front,
+            cva: engine.cva,
+            forwardHeadAngle: engine.forwardHeadAngle,
+            combinedScore: combinedScore
+        )
+        
+        feedbackGenerator.notificationOccurred(.success)
+        engine.stop()
+        
+        withAnimation {
+            appState = .finalResult(final)
+        }
     }
 }
 
-// MARK: - Posture Overlay
+// MARK: - Top Bar View
 
-struct PostureOverlay: View {
-    let points: (ear: CGPoint, shoulder: CGPoint)
-    let angle: Double
+struct TopBarView: View {
+    let appState: AppState
+    let engine: PostureEngine
+    
+    var body: some View {
+        HStack {
+            Image(systemName: "figure.mind.and.body")
+                .foregroundColor(.white)
+            Text("DeskWellness")
+                .font(.headline)
+                .foregroundColor(.white)
+            Spacer()
+            
+            if appState.isScanning {
+                Text(statusText)
+                    .font(.caption)
+                    .padding(6)
+                    .background(statusColor)
+                    .cornerRadius(8)
+                    .foregroundColor(.white)
+            }
+        }
+        .padding()
+    }
+    
+    private var statusText: String {
+        switch appState {
+        case .frontScanning:
+            return engine.isFrontLocked ? "LOCKED" : "SCANNING..."
+        case .sideScanning:
+            return engine.isSideLocked ? "LOCKED" : "TURN SIDEWAYS"
+        default:
+            return ""
+        }
+    }
+    
+    private var statusColor: Color {
+        switch appState {
+        case .frontScanning:
+            return engine.isFrontLocked ? .green : .gray
+        case .sideScanning:
+            return engine.isSideLocked ? .green : .orange
+        default:
+            return .gray
+        }
+    }
+}
+
+// MARK: - Front Scanning View
+
+struct FrontScanningView: View {
+    let shoulderTilt: Double
+    let headTilt: Double
+    let isLocked: Bool
 
     var body: some View {
-        GeometryReader { geo in
-            let ear = CGPoint(x: points.ear.x * geo.size.width, y: points.ear.y * geo.size.height)
-            let shoulder = CGPoint(x: points.shoulder.x * geo.size.width, y: points.shoulder.y * geo.size.height)
-
-            // The "Lightsaber" Line
-            Path { path in
-                path.move(to: shoulder)
-                path.addLine(to: ear)
+        VStack(spacing: 16) {
+            if isLocked {
+                // Show live metrics
+                VStack(spacing: 8) {
+                    HStack(spacing: 30) {
+                        MetricView(
+                            label: "SHOULDERS",
+                            value: String(format: "%.0f°", abs(shoulderTilt)),
+                            icon: shoulderTilt > 0 ? "arrow.up.right" : "arrow.up.left",
+                            isGood: abs(shoulderTilt) < 5
+                        )
+                        MetricView(
+                            label: "HEAD",
+                            value: String(format: "%.0f°", abs(headTilt)),
+                            icon: headTilt > 0 ? "arrow.right" : "arrow.left",
+                            isGood: abs(headTilt) < 3
+                        )
+                    }
+                    
+                    Text("Hold still...")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .padding(24)
+                .background(RoundedRectangle(cornerRadius: 20).fill(Color.black.opacity(0.6)))
+                .transition(.scale)
+            } else {
+                // Guidance to face camera
+                FrontGuidanceView()
+                    .transition(.opacity)
             }
-            .stroke(
-                LinearGradient(
-                    gradient: Gradient(colors: PostureConstants.colors(for: angle)),
-                    startPoint: .bottom, endPoint: .top
-                ),
-                style: StrokeStyle(lineWidth: 6, lineCap: .round)
-            )
-            .shadow(color: PostureConstants.colors(for: angle).last!, radius: 15)
+        }
+        .padding(.bottom, 40)
+    }
+}
 
-            // The Joints
-            Circle().fill(.white).frame(width: 12).position(ear).shadow(radius: 5)
-            Circle().fill(.white).frame(width: 12).position(shoulder)
+struct MetricView: View {
+    let label: String
+    let value: String
+    let icon: String
+    let isGood: Bool
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(label)
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.6))
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                Text(value)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+            }
+            .foregroundColor(isGood ? .cyan : .orange)
         }
     }
 }
 
-// MARK: - Scanning View
+struct FrontGuidanceView: View {
+    @State private var isAnimating = false
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            ZStack {
+                Image(systemName: "viewfinder")
+                    .font(.system(size: 80, weight: .light))
+                    .foregroundColor(.cyan)
+                
+                Image(systemName: "person.fill")
+                    .font(.system(size: 36))
+                    .foregroundColor(.cyan)
+            }
+            .scaleEffect(isAnimating ? 1.05 : 1.0)
+            .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: isAnimating)
+            
+            VStack(spacing: 6) {
+                Text("Face the camera")
+                    .font(.title3.weight(.semibold))
+                    .foregroundColor(.white)
+                
+                Text("Stand naturally and look straight ahead")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.7))
+            }
+        }
+        .padding(24)
+        .background(RoundedRectangle(cornerRadius: 20).fill(Color.black.opacity(0.6)))
+        .onAppear { isAnimating = true }
+    }
+}
 
-struct ScanningView: View {
-    let angle: Double
+// MARK: - Side Scanning View
+
+struct SideScanningView: View {
+    let cva: Double          // Craniovertebral Angle
     let isLocked: Bool
     @State private var isAnimating = false
 
     var body: some View {
         if isLocked {
             VStack(spacing: 4) {
-                Text(String(format: "%.0f°", angle))
+                Text(String(format: "%.0f°", cva))
                     .font(.system(size: 72, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
-                Text(PostureConstants.statusText(for: angle))
+                Text(PostureConstants.cvaStatus(for: cva))
                     .font(.headline)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(angle > PostureConstants.badAngleThreshold ? Color.red : Color.blue)
+                    .background(cva >= PostureConstants.cvaNormal ? Color.green : (cva >= PostureConstants.cvaMildFHP ? Color.cyan : Color.orange))
                     .cornerRadius(20)
                     .foregroundColor(.white)
+                Text("Neck Angle")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.6))
             }
             .padding(.bottom, 60)
             .transition(.scale)
@@ -244,9 +469,8 @@ struct SideProfileGuidanceView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            // Visual instruction with animated icons
             HStack(spacing: 24) {
-                // Front-facing person (current position - faded)
+                // Front-facing person (faded)
                 ZStack {
                     Image(systemName: "viewfinder")
                         .font(.system(size: 50, weight: .light))
@@ -256,71 +480,137 @@ struct SideProfileGuidanceView: View {
                         .foregroundColor(.white.opacity(0.4))
                 }
 
-                // Animated turning arrow
+                // Arrow
                 Image(systemName: "arrow.turn.right.up")
                     .font(.system(size: 28, weight: .semibold))
                     .foregroundColor(.cyan)
                     .rotationEffect(.degrees(isAnimating ? 0 : -10))
-                    .animation(
-                        .easeInOut(duration: 0.6)
-                        .repeatForever(autoreverses: true),
-                        value: isAnimating
-                    )
+                    .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: isAnimating)
 
-                // Side profile person in viewfinder (target position - highlighted)
+                // Side profile
                 ZStack {
-                    // Viewfinder frame
                     Image(systemName: "viewfinder")
                         .font(.system(size: 60, weight: .light))
                         .foregroundColor(.cyan)
-
-                    // 3D rotated person to suggest side view
                     Image(systemName: "person.fill")
                         .font(.system(size: 28))
                         .foregroundColor(.cyan)
                         .rotation3DEffect(.degrees(50), axis: (x: 0, y: 1, z: 0))
                 }
-                .overlay(
-                    // Pulsing highlight
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.cyan, lineWidth: 2)
-                        .frame(width: 70, height: 70)
-                        .scaleEffect(isAnimating ? 1.15 : 1.0)
-                        .opacity(isAnimating ? 0 : 0.8)
-                        .animation(
-                            .easeOut(duration: 1.2)
-                            .repeatForever(autoreverses: false),
-                            value: isAnimating
-                        )
-                )
             }
 
-            // Text instructions
             VStack(spacing: 6) {
                 Text("Turn sideways to the camera")
                     .font(.title3.weight(.semibold))
                     .foregroundColor(.white)
-
-                Text("Show your side profile so we can measure your posture")
+                Text("Show your side profile for forward head check")
                     .font(.subheadline)
                     .foregroundColor(.white.opacity(0.7))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
             }
         }
         .padding(24)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.black.opacity(0.6))
-        )
+        .background(RoundedRectangle(cornerRadius: 20).fill(Color.black.opacity(0.6)))
         .padding(.horizontal, 20)
     }
 }
 
-// MARK: - Result View
+// MARK: - Front Result View
 
-struct ResultView: View {
-    let score: Int
+struct FrontResultView: View {
+    let score: FrontScore
+    let onSideScan: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            VStack(spacing: 12) {
+                Text("Front Posture")
+                    .font(.headline)
+                    .foregroundColor(.white.opacity(0.7))
+                
+                // Score circle
+                ZStack {
+                    Circle()
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 8)
+                        .frame(width: 100, height: 100)
+                    Circle()
+                        .trim(from: 0, to: CGFloat(score.score) / 100)
+                        .stroke(scoreColor, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 100, height: 100)
+                    Text("\(score.score)")
+                        .font(.system(size: 36, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                
+                // Metrics
+                HStack(spacing: 20) {
+                    VStack {
+                        Text("Shoulders")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Text(String(format: "%.0f°", abs(score.shoulderTilt)))
+                            .font(.title3.bold())
+                            .foregroundColor(abs(score.shoulderTilt) < 5 ? .green : .orange)
+                    }
+                    VStack {
+                        Text("Head Tilt")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Text(String(format: "%.0f°", abs(score.headTilt)))
+                            .font(.title3.bold())
+                            .foregroundColor(abs(score.headTilt) < 3 ? .green : .orange)
+                    }
+                }
+            }
+            .padding(24)
+            .background(Color.black.opacity(0.8))
+            .cornerRadius(20)
+            
+            if score.needsSideScan {
+                Button(action: onSideScan) {
+                    HStack {
+                        Image(systemName: "arrow.turn.up.right")
+                        Text("Check Forward Head")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.cyan)
+                    .cornerRadius(12)
+                }
+                .padding(.horizontal, 40)
+                
+                Button("Skip", action: onSkip)
+                    .foregroundColor(.gray)
+            } else {
+                Button(action: onSkip) {
+                    Text("Continue")
+                        .font(.headline)
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.white)
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal, 40)
+            }
+        }
+        .padding(.bottom, 40)
+    }
+    
+    private var scoreColor: Color {
+        if score.score > 80 { return .green }
+        if score.score > 60 { return .orange }
+        return .red
+    }
+}
+
+// MARK: - Final Result View
+
+struct FinalResultView: View {
+    let score: FinalScore
     let onContinue: () -> Void
 
     var body: some View {
@@ -336,25 +626,54 @@ struct ResultView: View {
                         .stroke(Color.gray.opacity(0.3), lineWidth: 10)
                         .frame(width: 120, height: 120)
                     Circle()
-                        .trim(from: 0, to: CGFloat(score) / 100)
-                        .stroke(score > 80 ? Color.green : Color.orange, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                        .trim(from: 0, to: CGFloat(score.combinedScore) / 100)
+                        .stroke(score.combinedScore > 80 ? Color.green : Color.orange, style: StrokeStyle(lineWidth: 10, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .frame(width: 120, height: 120)
-                    Text("\(score)")
+                    Text("\(score.combinedScore)")
                         .font(.system(size: 40, weight: .bold))
                         .foregroundColor(.white)
                 }
 
-                Text(score > 80 ? "Great Posture" : "Requires Correction")
+                Text(score.combinedScore > 80 ? "Great Posture" : "Needs Improvement")
                     .font(.headline)
                     .foregroundColor(.white)
+                
+                // Breakdown
+                VStack(spacing: 8) {
+                    HStack {
+                        Text("Shoulder Alignment")
+                            .foregroundColor(.gray)
+                        Spacer()
+                        Text(abs(score.frontScore.shoulderTilt) < 5 ? "✓ Good" : "⚠ Tilted")
+                            .foregroundColor(abs(score.frontScore.shoulderTilt) < 5 ? .green : .orange)
+                    }
+                    HStack {
+                        Text("Head Position")
+                            .foregroundColor(.gray)
+                        Spacer()
+                        Text(abs(score.frontScore.headTilt) < 3 ? "✓ Centered" : "⚠ Tilted")
+                            .foregroundColor(abs(score.frontScore.headTilt) < 3 ? .green : .orange)
+                    }
+                    if let cva = score.cva {
+                        HStack {
+                            Text("Head Alignment")
+                                .foregroundColor(.gray)
+                            Spacer()
+                            Text(PostureConstants.cvaStatus(for: cva))
+                                .foregroundColor(cva >= PostureConstants.cvaNormal ? .green : (cva >= PostureConstants.cvaMildFHP ? .cyan : .orange))
+                        }
+                    }
+                }
+                .font(.subheadline)
+                .padding(.top, 10)
             }
             .padding(30)
             .background(Color.black.opacity(0.8))
             .cornerRadius(20)
 
             Button(action: onContinue) {
-                Text("See How to Fix This")
+                Text("Get Posture Tips")
                     .font(.headline)
                     .foregroundColor(.black)
                     .frame(maxWidth: .infinity)
@@ -362,6 +681,14 @@ struct ResultView: View {
                     .background(Color.white)
                     .cornerRadius(12)
             }
+            
+            // Disclaimer for EU/Medical Device Compliance
+            Text("For wellness purposes only. Not a medical device.")
+                .font(.caption2)
+                .foregroundColor(.gray.opacity(0.6))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+                .padding(.bottom, 10)
             .padding(.horizontal, 40)
         }
         .padding(.bottom, 40)
