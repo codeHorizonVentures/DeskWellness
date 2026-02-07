@@ -2,18 +2,14 @@
 //  ContentView.swift
 //  DeskWellness
 //
-//  Created by P Dev on 30.04.2025.
+//  Created by Petro Kulakov on 30.04.2025.
 //
-//
-//  ContentView.swift
-//  DeskWellness
-//
-//  P Dev on 30.04.2025.
-//
+
 import SwiftUI
 import AVFoundation
 
-// 1. App State Machine
+// MARK: - App State Machine
+
 enum AppState {
     case scanning
     case result(score: Int, image: Image?)
@@ -25,13 +21,16 @@ enum AppState {
     }
 }
 
+// MARK: - Main Content View
+
 struct ContentView: View {
     @StateObject private var engine = PostureEngine()
     @State private var appState: AppState = .scanning
     @State private var scanDuration: Double = 0.0
     @State private var feedbackGenerator = UINotificationFeedbackGenerator()
+    @State private var lastSpeechTime: Date = .distantPast
+    @State private var showCameraPermissionAlert = false
 
-    // Timer for the "Scan" phase
     let scanTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     let synthesizer = AVSpeechSynthesizer()
 
@@ -77,12 +76,10 @@ struct ContentView: View {
                     ScanningView(angle: engine.headAngle, isLocked: engine.isLocked)
                 case .result(let score, _):
                     ResultView(score: score) {
-                        // Action: Go to Paywall
                         withAnimation { appState = .paywall }
                     }
                 case .paywall:
                     PaywallView {
-                        // Action: Reset
                         appState = .scanning
                         scanDuration = 0
                         engine.start()
@@ -90,52 +87,93 @@ struct ContentView: View {
                 }
             }
         }
-        .onAppear { engine.start() }
+        .onAppear {
+            checkCameraPermission()
+        }
         .onReceive(scanTimer) { _ in
-            if case .scanning = appState, engine.isLocked {
-                scanDuration += 1
-                // Auto-finish scan after 5 seconds of good data
-                if scanDuration >= 5 {
-                    finishScan()
+            handleScanTimer()
+        }
+        .alert("Camera Access Required", isPresented: $showCameraPermissionAlert) {
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
                 }
             }
-            
-            if engine.isLocked {
-                if scanDuration == 0 { speak("Hold still.") }
-                if scanDuration == 3 { speak("Done.") }
-            } else {
-                // Debounce this so it doesn't spam
-                if Int(Date().timeIntervalSince1970) % 3 == 0 {
-                    speak("I can't see your side profile.")
-                }
-            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("DeskWellness needs camera access to analyze your posture. Please enable it in Settings.")
         }
     }
 
-    func speak(_ text: String) {
+    // MARK: - Camera Permission
+
+    private func checkCameraPermission() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            engine.start()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        engine.start()
+                    } else {
+                        showCameraPermissionAlert = true
+                    }
+                }
+            }
+        case .denied, .restricted:
+            showCameraPermissionAlert = true
+        @unknown default:
+            showCameraPermissionAlert = true
+        }
+    }
+
+    // MARK: - Speech with Debounce
+
+    private func speakDebounced(_ text: String) {
+        let now = Date()
+        guard now.timeIntervalSince(lastSpeechTime) >= PostureConstants.speechDebounceInterval else { return }
+        lastSpeechTime = now
+
         let utterance = AVSpeechUtterance(string: text)
         utterance.rate = 0.5
         synthesizer.speak(utterance)
     }
 
-    func finishScan() {
-        // Calculate Score (0-100) based on angle
-        // Angle > 30 is bad (Score 40). Angle < 10 is perfect (Score 100).
-        let angle = engine.headAngle
-        // If angle is 0 (Perfect), Score = 100.
-        // If angle is 45 (Bad), Score = 100 - 90 = 10.
+    // MARK: - Scan Timer Logic
 
-        let score = Int(max(0, min(100, 100 - (angle * 2))))
+    private func handleScanTimer() {
+        guard case .scanning = appState else { return }
+
+        if engine.isLocked {
+            scanDuration += 1
+
+            if scanDuration == 1 {
+                speakDebounced("Hold still.")
+            } else if scanDuration == 3 {
+                speakDebounced("Done.")
+            }
+
+            if scanDuration >= PostureConstants.scanLockDuration {
+                finishScan()
+            }
+        } else {
+            speakDebounced("I can't see your side profile.")
+        }
+    }
+
+    private func finishScan() {
+        let score = PostureConstants.score(for: engine.headAngle)
 
         feedbackGenerator.notificationOccurred(.success)
         withAnimation {
             appState = .result(score: score, image: nil)
         }
-        engine.stop() // Freeze camera
+        engine.stop()
     }
 }
 
-// MARK: - Subviews for the "Wow" Effect
+// MARK: - Posture Overlay
 
 struct PostureOverlay: View {
     let points: (ear: CGPoint, shoulder: CGPoint)
@@ -153,28 +191,26 @@ struct PostureOverlay: View {
             }
             .stroke(
                 LinearGradient(
-                    gradient: Gradient(colors: getColors(angle: angle)),
+                    gradient: Gradient(colors: PostureConstants.colors(for: angle)),
                     startPoint: .bottom, endPoint: .top
                 ),
                 style: StrokeStyle(lineWidth: 6, lineCap: .round)
             )
-            .shadow(color: getColors(angle: angle).last!, radius: 15) // MAXIMUM GLOW
+            .shadow(color: PostureConstants.colors(for: angle).last!, radius: 15)
 
             // The Joints
             Circle().fill(.white).frame(width: 12).position(ear).shadow(radius: 5)
             Circle().fill(.white).frame(width: 12).position(shoulder)
         }
     }
-
-    func getColors(angle: Double) -> [Color] {
-        if angle > 25 { return [.red, .orange] }
-        return [.cyan, .blue] // "Wow" Colors
-    }
 }
+
+// MARK: - Scanning View
 
 struct ScanningView: View {
     let angle: Double
     let isLocked: Bool
+    @State private var isAnimating = false
 
     var body: some View {
         if isLocked {
@@ -182,25 +218,106 @@ struct ScanningView: View {
                 Text(String(format: "%.0f°", angle))
                     .font(.system(size: 72, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
-                Text(angle > 25 ? "HEAD FORWARD" : "GOOD ALIGNMENT")
+                Text(PostureConstants.statusText(for: angle))
                     .font(.headline)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(angle > 25 ? Color.red : Color.blue)
+                    .background(angle > PostureConstants.badAngleThreshold ? Color.red : Color.blue)
                     .cornerRadius(20)
                     .foregroundColor(.white)
             }
             .padding(.bottom, 60)
             .transition(.scale)
         } else {
-            Text("Turn side-on to camera")
-                .font(.title2)
-                .foregroundColor(.white.opacity(0.8))
-                .padding(.bottom, 60)
+            SideProfileGuidanceView(isAnimating: $isAnimating)
+                .padding(.bottom, 40)
                 .transition(.opacity)
+                .onAppear { isAnimating = true }
         }
     }
 }
+
+// MARK: - Side Profile Guidance View
+
+struct SideProfileGuidanceView: View {
+    @Binding var isAnimating: Bool
+
+    var body: some View {
+        VStack(spacing: 20) {
+            // Visual instruction with animated icons
+            HStack(spacing: 24) {
+                // Front-facing person (current position - faded)
+                ZStack {
+                    Image(systemName: "viewfinder")
+                        .font(.system(size: 50, weight: .light))
+                        .foregroundColor(.white.opacity(0.3))
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.white.opacity(0.4))
+                }
+
+                // Animated turning arrow
+                Image(systemName: "arrow.turn.right.up")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundColor(.cyan)
+                    .rotationEffect(.degrees(isAnimating ? 0 : -10))
+                    .animation(
+                        .easeInOut(duration: 0.6)
+                        .repeatForever(autoreverses: true),
+                        value: isAnimating
+                    )
+
+                // Side profile person in viewfinder (target position - highlighted)
+                ZStack {
+                    // Viewfinder frame
+                    Image(systemName: "viewfinder")
+                        .font(.system(size: 60, weight: .light))
+                        .foregroundColor(.cyan)
+
+                    // 3D rotated person to suggest side view
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 28))
+                        .foregroundColor(.cyan)
+                        .rotation3DEffect(.degrees(50), axis: (x: 0, y: 1, z: 0))
+                }
+                .overlay(
+                    // Pulsing highlight
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.cyan, lineWidth: 2)
+                        .frame(width: 70, height: 70)
+                        .scaleEffect(isAnimating ? 1.15 : 1.0)
+                        .opacity(isAnimating ? 0 : 0.8)
+                        .animation(
+                            .easeOut(duration: 1.2)
+                            .repeatForever(autoreverses: false),
+                            value: isAnimating
+                        )
+                )
+            }
+
+            // Text instructions
+            VStack(spacing: 6) {
+                Text("Turn sideways to the camera")
+                    .font(.title3.weight(.semibold))
+                    .foregroundColor(.white)
+
+                Text("Show your side profile so we can measure your posture")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+            }
+        }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.black.opacity(0.6))
+        )
+        .padding(.horizontal, 20)
+    }
+}
+
+// MARK: - Result View
 
 struct ResultView: View {
     let score: Int
@@ -208,7 +325,6 @@ struct ResultView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            // The "Score Card"
             VStack(spacing: 10) {
                 Text("Your Desk Score")
                     .textCase(.uppercase)
@@ -234,10 +350,9 @@ struct ResultView: View {
                     .foregroundColor(.white)
             }
             .padding(30)
-            .background(Color.black.opacity(0.8)) // Glass effect
+            .background(Color.black.opacity(0.8))
             .cornerRadius(20)
 
-            // The "Sell" Button
             Button(action: onContinue) {
                 Text("See How to Fix This")
                     .font(.headline)
@@ -253,6 +368,8 @@ struct ResultView: View {
         .transition(.move(edge: .bottom))
     }
 }
+
+// MARK: - Paywall View
 
 struct PaywallView: View {
     let onReset: () -> Void
@@ -271,7 +388,9 @@ struct PaywallView: View {
             }
             .padding()
 
-            Button(action: { /* Integrate RevenueCat Here */ }) {
+            Button(action: {
+                // TODO: Integrate RevenueCat Here
+            }) {
                 Text("Start 7-Day Free Trial")
                     .bold()
                     .frame(maxWidth: .infinity)
@@ -294,9 +413,12 @@ struct PaywallView: View {
     }
 }
 
+// MARK: - Feature Row
+
 struct FeatureRow: View {
     let icon: String
     let text: String
+
     var body: some View {
         HStack {
             Image(systemName: icon).foregroundColor(.green)

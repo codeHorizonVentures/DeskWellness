@@ -2,7 +2,7 @@
 //  PostureEngine.swift
 //  DeskWellness
 //
-//  Created by P Dev on 1/11/26.
+//  Created by Petro Kulakov on 1/11/26.
 //
 
 import AVFoundation
@@ -21,7 +21,7 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
     // MARK: - Internal Math State (Smoothing)
     private var previousEar: CGPoint?
     private var previousShoulder: CGPoint?
-    private let smoothingAlpha: CGFloat = 0.6 // Tweak this: 1.0 = fast/jittery, 0.1 = slow/laggy
+    private let smoothingAlpha: CGFloat = 0.6
 
     // MARK: - Vision Request
     private let videoOutput = AVCaptureVideoDataOutput()
@@ -66,8 +66,7 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
                 return
             }
 
-            // 1. Extract Points (Safety Check)
-            // Instead of forcing .leftEar, find the BEST side
+            // Extract Points (Safety Check)
             let leftEar = try? observation.recognizedPoint(.leftEar)
             let leftShoulder = try? observation.recognizedPoint(.leftShoulder)
 
@@ -81,7 +80,7 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
             let leftConf = (leftEar?.confidence ?? 0) + (leftShoulder?.confidence ?? 0)
             let rightConf = (rightEar?.confidence ?? 0) + (rightShoulder?.confidence ?? 0)
 
-            if leftConf > rightConf && leftConf > 1.0 { // Threshold 0.5 * 2
+            if leftConf > rightConf && leftConf > 1.0 {
                 ear = leftEar
                 shoulder = leftShoulder
             } else if rightConf > 1.0 {
@@ -95,39 +94,33 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
                 return
             }
 
-            // 2. Convert to CGPoint (0..1)
+            // Convert to CGPoint (0..1)
             let rawEar = CGPoint(x: earPoint.location.x, y: 1 - earPoint.location.y)
             let rawShoulder = CGPoint(x: shoulderPoint.location.x, y: 1 - shoulderPoint.location.y)
 
-            // 3. APPLY SMOOTHING (The Wow Factor)
-            // This prevents the "jittery line" effect
+            // APPLY SMOOTHING (The Wow Factor)
             let smoothedEar = smooth(new: rawEar, old: previousEar)
             let smoothedShoulder = smooth(new: rawShoulder, old: previousShoulder)
 
             previousEar = smoothedEar
             previousShoulder = smoothedShoulder
 
-            // 4. Calculate Angle (Geometry)
-            // 0° = Perfect Vertical alignment. +ve = Head Forward.
-            // Ear Y < Shoulder Y (Ear is above).
-
-            // Calculate raw difference
+            // Calculate Angle (Geometry)
             let deltaX = smoothedEar.x - smoothedShoulder.x
-            let deltaY = smoothedShoulder.y - smoothedEar.y // Positive if Ear is above Shoulder
+            let deltaY = smoothedShoulder.y - smoothedEar.y
 
             // Safety: If head is somehow below shoulder (upside down), ignore.
             guard deltaY > 0 else { return }
 
             // Calculate Angle from Vertical (Y-axis)
-            // atan(deltaX / deltaY) gives angle from vertical.
-            // We use abs(deltaX) so it works if you face Left OR Right.
             let angleRadians = atan(abs(deltaX) / deltaY)
             let angleDegrees = angleRadians * 180 / .pi
 
-            // DEBUG PRINT: Check the raw values in Console
+            #if DEBUG
             print("Ear: \(smoothedEar), Shoulder: \(smoothedShoulder), Angle: \(angleDegrees)")
+            #endif
 
-            // 5. Update UI (Main Thread)
+            // Update UI (Main Thread)
             DispatchQueue.main.async {
                 self.isLocked = true
                 self.confidence = Double(earPoint.confidence)
@@ -136,7 +129,9 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
             }
 
         } catch {
+            #if DEBUG
             print("Vision Error: \(error)")
+            #endif
         }
     }
 
@@ -148,4 +143,3 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
         )
     }
 }
-

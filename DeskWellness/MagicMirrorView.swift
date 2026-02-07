@@ -2,7 +2,10 @@
 //  MagicMirrorView.swift
 //  DeskWellness
 //
-//  Created by P Dev on 1/11/26.
+//  Created by Petro Kulakov on 1/11/26.
+//
+//  NOTE: This view is currently unused but provides an alternative real-time
+//  posture monitoring experience. Consider integrating or removing.
 //
 
 import SwiftUI
@@ -11,15 +14,16 @@ import AVFoundation
 struct MagicMirrorView: View {
     @StateObject private var engine = PostureEngine()
     @State private var feedbackGenerator = UINotificationFeedbackGenerator()
+    @State private var showCameraPermissionAlert = false
+    @State private var previousAngle: Double = 0
 
     var body: some View {
         ZStack {
-            // 1. Camera Layer (You'll need a standard CameraPreview view wrapping the session)
-            // For code brevity, assume CameraPreview(session: engine.captureSession) exists
+            // 1. Camera Layer
             CameraPreview(session: engine.captureSession)
                 .ignoresSafeArea()
 
-            // 2. Dimming Overlay (Makes the UI pop)
+            // 2. Dimming Overlay
             Color.black.opacity(0.3)
                 .ignoresSafeArea()
 
@@ -36,13 +40,13 @@ struct MagicMirrorView: View {
                     }
                     .stroke(
                         LinearGradient(
-                            gradient: Gradient(colors: getStatusColor(angle: engine.headAngle)),
+                            gradient: Gradient(colors: PostureConstants.colors(for: engine.headAngle)),
                             startPoint: .bottom,
                             endPoint: .top
                         ),
                         style: StrokeStyle(lineWidth: 6, lineCap: .round)
                     )
-                    .shadow(color: getStatusColor(angle: engine.headAngle).last!, radius: 10) // GLOW EFFECT
+                    .shadow(color: PostureConstants.colors(for: engine.headAngle).last!, radius: 10)
 
                     // The Joints (Premium Polish)
                     Circle()
@@ -68,9 +72,9 @@ struct MagicMirrorView: View {
                             .font(.system(size: 64, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
 
-                        Text(getFeedbackText(angle: engine.headAngle))
+                        Text(PostureConstants.feedbackText(for: engine.headAngle))
                             .font(.headline)
-                            .foregroundColor(getStatusColor(angle: engine.headAngle).last!)
+                            .foregroundColor(PostureConstants.colors(for: engine.headAngle).last!)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
                             .background(Color.black.opacity(0.6))
@@ -78,8 +82,8 @@ struct MagicMirrorView: View {
                     }
                     .padding(.bottom, 50)
                     .transition(.opacity.animation(.easeInOut))
-                    .onChange(of: engine.headAngle) { newAngle in
-                        triggerHaptic(angle: newAngle)
+                    .onChange(of: engine.headAngle) { oldAngle, newAngle in
+                        triggerHaptic(oldAngle: oldAngle, newAngle: newAngle)
                     }
                 } else {
                     // Scanning State
@@ -91,49 +95,55 @@ struct MagicMirrorView: View {
             }
         }
         .onAppear {
-            checkPermissions()
-            engine.start()
-
+            checkCameraPermission()
         }
-        .onDisappear { engine.stop() }
+        .onDisappear {
+            engine.stop()
+        }
+        .alert("Camera Access Required", isPresented: $showCameraPermissionAlert) {
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("DeskWellness needs camera access to analyze your posture. Please enable it in Settings.")
+        }
     }
 
-    // MARK: - Logic Helpers
+    // MARK: - Camera Permission
 
-    func checkPermissions() {
+    private func checkCameraPermission() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
-            return
+            engine.start()
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { granted in
-                if granted { engine.start() }
+                DispatchQueue.main.async {
+                    if granted {
+                        engine.start()
+                    } else {
+                        showCameraPermissionAlert = true
+                    }
+                }
             }
-        default:
-            print("Camera permission denied")
+        case .denied, .restricted:
+            showCameraPermissionAlert = true
+        @unknown default:
+            showCameraPermissionAlert = true
         }
     }
 
+    // MARK: - Haptic Feedback
 
-    // Returns Gradient Colors based on posture quality
-    func getStatusColor(angle: Double) -> [Color] {
-        if angle > 25 { return [.red, .orange] } // Bad
-        if angle > 10 { return [.yellow, .orange] } // Okay
-        return [.blue, .cyan] // Perfect (The "Wow" Green/Blue)
-    }
-
-    func getFeedbackText(angle: Double) -> String {
-        if angle > 25 { return "HEAD FORWARD" }
-        if angle > 10 { return "ALMOST THERE" }
-        return "PERFECT ALIGNMENT"
-    }
-
-    func triggerHaptic(angle: Double) {
-        // Trigger a HEAVY thud if user crosses the "Bad" threshold
-        if angle > 25 && angle < 26 {
+    private func triggerHaptic(oldAngle: Double, newAngle: Double) {
+        // Trigger warning when crossing into "bad" threshold
+        if oldAngle <= PostureConstants.badAngleThreshold && newAngle > PostureConstants.badAngleThreshold {
             feedbackGenerator.notificationOccurred(.warning)
         }
-        // Trigger a PLEASANT ping if user hits "Perfect"
-        if angle < 10 && angle > 9 {
+        // Trigger success when crossing into "perfect" threshold
+        if oldAngle >= PostureConstants.perfectAngleThreshold && newAngle < PostureConstants.perfectAngleThreshold {
             feedbackGenerator.notificationOccurred(.success)
         }
     }
