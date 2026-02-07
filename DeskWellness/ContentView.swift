@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AVFoundation
+import StoreKit
 
 // MARK: - App State Machine
 
@@ -122,7 +123,9 @@ struct ContentView: View {
                 case .finalResult(let score):
                     FinalResultView(score: score, onRestart: {
                         engine.reset()
+                        scanDuration = 0
                         appState = .frontScanning
+                        engine.start()
                     }, onContinue: {
                         showPostureTips = true
                     })
@@ -620,6 +623,8 @@ struct FinalResultView: View {
     let score: FinalScore
     let onRestart: () -> Void
     let onContinue: () -> Void
+    
+    @AppStorage("hasCompletedFirstScan") private var hasCompletedFirstScan = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -708,6 +713,17 @@ struct FinalResultView: View {
         }
         .padding(.bottom, 40)
         .transition(.move(edge: .bottom))
+        .onAppear {
+            if !hasCompletedFirstScan {
+                hasCompletedFirstScan = true
+                // Request review after a delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    if let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
+                        SKStoreReviewController.requestReview(in: scene)
+                    }
+                }
+            }
+        }
     }
 }
 

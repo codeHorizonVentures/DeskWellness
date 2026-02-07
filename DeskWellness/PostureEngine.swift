@@ -233,6 +233,35 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
 
         let leftConf = (leftEar?.confidence ?? 0) + (leftShoulder?.confidence ?? 0)
         let rightConf = (rightEar?.confidence ?? 0) + (rightShoulder?.confidence ?? 0)
+        
+        // Anti-Front Check 1: Shoulder Width
+        if let l = leftShoulder, let r = rightShoulder, l.confidence > 0.5, r.confidence > 0.5 {
+            let width = abs(l.location.x - r.location.x)
+            if width > 0.25 {
+                #if DEBUG
+                print("Side rejected: Shoulder width \(width) implies front view")
+                #endif
+                sideMissedFrames += 1
+                if sideMissedFrames > PostureConstants.missedFrameTolerance {
+                    DispatchQueue.main.async { self.isSideLocked = false }
+                }
+                return
+            }
+        }
+        
+        // Anti-Front Check 2: Two Eyes Visible
+        let leftEye = try? observation.recognizedPoint(.leftEye)
+        let rightEye = try? observation.recognizedPoint(.rightEye)
+        if let l = leftEye, let r = rightEye, l.confidence > 0.6, r.confidence > 0.6 {
+             #if DEBUG
+             print("Side rejected: Two eyes visible implies front view")
+             #endif
+             sideMissedFrames += 1
+             if sideMissedFrames > PostureConstants.missedFrameTolerance {
+                    DispatchQueue.main.async { self.isSideLocked = false }
+             }
+             return
+        }
 
         if leftConf > rightConf && leftConf > 1.0 {
             ear = leftEar
