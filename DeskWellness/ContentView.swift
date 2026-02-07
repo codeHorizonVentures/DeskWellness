@@ -49,6 +49,7 @@ struct ContentView: View {
     @State private var lastSpeechTime: Date = .distantPast
     @State private var showCameraPermissionAlert = false
     @State private var frontScore: FrontScore? = nil
+    @State private var showPostureTips = false
 
     let scanTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     let synthesizer = AVSpeechSynthesizer()
@@ -119,10 +120,13 @@ struct ContentView: View {
                     )
                     
                 case .finalResult(let score):
-                    FinalResultView(score: score) {
-                        withAnimation { appState = .paywall }
-                    }
-                    
+                    FinalResultView(score: score, onRestart: {
+                        engine.reset()
+                        appState = .frontScanning
+                    }, onContinue: {
+                        showPostureTips = true
+                    })
+                    .transition(.opacity)
                 case .paywall:
                     PaywallView {
                         engine.reset()
@@ -148,6 +152,9 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("DeskWellness needs camera access to analyze your posture. Please enable it in Settings.")
+        }
+        .sheet(isPresented: $showPostureTips) {
+            PostureTipView()
         }
     }
 
@@ -611,6 +618,7 @@ struct FrontResultView: View {
 
 struct FinalResultView: View {
     let score: FinalScore
+    let onRestart: () -> Void
     let onContinue: () -> Void
 
     var body: some View {
@@ -689,7 +697,14 @@ struct FinalResultView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
                 .padding(.bottom, 10)
-            .padding(.horizontal, 40)
+                .padding(.horizontal, 40)
+                .padding(.bottom, 10)
+            
+            Button("Restart Scan") {
+                onRestart()
+            }
+            .foregroundColor(.white.opacity(0.6))
+            .padding(.bottom, 10)
         }
         .padding(.bottom, 40)
         .transition(.move(edge: .bottom))
