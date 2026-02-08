@@ -51,6 +51,14 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
     
     // Lower alpha = more stable but slower. Higher = faster but jittery.
     private let smoothingAlpha: CGFloat = 0.3
+    
+    // Frame Storage for Snapshots
+    private var currentFrame: CVPixelBuffer?
+    
+    // Snapshots
+    var frontSnapshot: UIImage?
+    var sideSnapshot: UIImage?
+    private let frameLock = NSLock()
 
     // MARK: - Vision Request
     private let videoOutput = AVCaptureVideoDataOutput()
@@ -121,6 +129,11 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
 
     // MARK: - The "Magic" Loop (Runs every frame)
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        
+        // Store frame for snapshot
+        frameLock.lock()
+        currentFrame = CMSampleBufferGetImageBuffer(sampleBuffer)
+        frameLock.unlock()
 
         let request = VNDetectHumanBodyPoseRequest()
 
@@ -339,11 +352,83 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
             y: (new.y * smoothingAlpha) + (old.y * (1 - smoothingAlpha))
         )
     }
+
+    
+    // MARK: - Snapshot
+    
+    func captureSnapshot(for mode: DetectionMode) -> UIImage? {
+        frameLock.lock()
+        let buffer = currentFrame
+        frameLock.unlock()
+        
+        guard let pixelBuffer = buffer else { return nil }
+        
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        let context = CIContext()
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
+        
+        // Use .leftMirrored for Front Camera in Portrait to appear correct (Mirrored Selfie)
+        // If Back camera, usually .right is correct.
+        // Assuming Front Camera here.
+        let rawImage = UIImage(cgImage: cgImage, scale: 1.0, orientation: .leftMirrored)
+        
+        let renderer = UIGraphicsImageRenderer(size: rawImage.size)
+        return renderer.image { ctx in
+            rawImage.draw(at: .zero)
+            
+            // Draw Overlay
+            let context = ctx.cgContext
+            context.setLineWidth(5.0)
+            context.setStrokeColor(UIColor.green.cgColor)
+            
+            let width = rawImage.size.width
+            let height = rawImage.size.height
+            
+            if mode == .side, let points = sidePoints {
+                // Side Overlay logic (CVA)
+                // Need to map coordinates if image was rotated/flipped?
+                // For simplicity, we assume normalized points align with the FINAL image rect
+                // This might need tuning if Vision points are based on unrotated buffer.
+                // But .leftMirrored usually aligns Vision's "Up is Up".
+                
+                let ear = CGPoint(x: points.ear.x * width, y: (1 - points.ear.y) * height)
+                let neck = CGPoint(x: points.neck.x * width, y: (1 - points.neck.y) * height)
+                
+                context.move(to: ear)
+                context.addLine(to: neck)
+                context.strokePath()
+                
+                // Draw Horizontal from Neck
+                context.setStrokeColor(UIColor.red.withAlphaComponent(0.5).cgColor)
+                context.setLineDash(phase: 0, lengths: [10, 5])
+                context.move(to: neck)
+                context.addLine(to: CGPoint(x: neck.x + 200, y: neck.y))
+                context.strokePath()
+            } else if mode == .front, let points = frontPoints {
+                // Front Overlay Logic (Shoulder Line + Nose)
+                 let l = CGPoint(x: points.leftShoulder.x * width, y: (1 - points.leftShoulder.y) * height)
+                 let r = CGPoint(x: points.rightShoulder.x * width, y: (1 - points.rightShoulder.y) * height)
+                 let n = CGPoint(x: points.nose.x * width, y: (1 - points.nose.y) * height)
+                 
+                 context.move(to: l)
+                 context.addLine(to: r)
+                 context.strokePath()
+                 
+                 // Nose to Midpoint
+                 let mid = CGPoint(x: (l.x + r.x)/2, y: (l.y + r.y)/2)
+                 context.setStrokeColor(UIColor.yellow.cgColor)
+                 context.move(to: mid)
+                 context.addLine(to: n)
+                 context.strokePath()
+            }
+        }
+    }
+
 }
 
 // MARK: - Front Pose Points
 
-struct FrontPosePoints {
+struct FrontPosePoints: Codable {
     let leftShoulder: CGPoint
     let rightShoulder: CGPoint
     let nose: CGPoint
@@ -351,7 +436,7 @@ struct FrontPosePoints {
 
 // MARK: - Side Pose Points (CVA-based)
 
-struct SidePosePoints {
+struct SidePosePoints: Codable {
     let ear: CGPoint       // Tragus approximation
     let neck: CGPoint      // C7 approximation
 }

@@ -43,14 +43,18 @@ struct FinalScore {
 // MARK: - Main Content View
 
 struct ContentView: View {
+    @Environment(\.modelContext) private var modelContext
     @StateObject private var engine = PostureEngine()
     @State private var appState: AppState = .frontScanning
     @State private var scanDuration: Double = 0.0
     @State private var feedbackGenerator = UINotificationFeedbackGenerator()
     @State private var lastSpeechTime: Date = .distantPast
+    @State private var showJournal = false
     @State private var showCameraPermissionAlert = false
     @State private var frontScore: FrontScore? = nil
     @State private var showPostureTips = false
+    @State private var frontSnapshot: UIImage?
+    @State private var sideSnapshot: UIImage?
 
     let scanTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     let synthesizer = AVSpeechSynthesizer()
@@ -62,6 +66,20 @@ struct ContentView: View {
                 .ignoresSafeArea()
                 .overlay(Color.black.opacity(appState.isScanning ? 0.2 : 0.8))
                 .blur(radius: appState.isScanning ? 0 : 10)
+                .overlay(alignment: .topLeading) {
+                    if appState.isScanning {
+                        Button(action: { showJournal = true }) {
+                            Image(systemName: "book.closed.fill")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .padding(12)
+                                .background(Material.thinMaterial)
+                                .clipShape(Circle())
+                        }
+                        .padding(.leading, 20)
+                        .padding(.top, 60)
+                    }
+                }
 
             // LAYER 2: Scanning Effects
             if case .frontScanning = appState, engine.isFrontLocked, let points = engine.frontPoints {
@@ -128,6 +146,47 @@ struct ContentView: View {
                         engine.start()
                     }, onContinue: {
                         showPostureTips = true
+                    }, onSave: { didExercise in
+                        let id = UUID().uuidString
+                        var sidePath: String?
+                        var frontPath: String?
+                        
+                        // Optimize & Save Side Snapshot
+                        if let sideImage = sideSnapshot?.resized(toMaxDimension: 1024),
+                           let data = sideImage.jpegData(compressionQuality: 0.7) {
+                            let filename = "\(id)_side.jpg"
+                            if let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent(filename) {
+                                try? data.write(to: url)
+                                sidePath = filename
+                            }
+                        }
+                        
+                        // Optimize & Save Front Snapshot
+                        if let frontImage = frontSnapshot?.resized(toMaxDimension: 1024),
+                           let data = frontImage.jpegData(compressionQuality: 0.7) {
+                            let filename = "\(id)_front.jpg"
+                            if let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent(filename) {
+                                try? data.write(to: url)
+                                frontPath = filename
+                            }
+                        }
+                        
+                        // Encode Points Data (Schema)
+                        let frontData = try? JSONEncoder().encode(engine.frontPoints)
+                        let sideData = try? JSONEncoder().encode(engine.sidePoints)
+                        
+                        // Create Entry
+                        let entry = DailyEntry(
+                            type: .scan,
+                            note: "Posture Scan Result",
+                            photoPath: sidePath,
+                            frontPhotoPath: frontPath,
+                            exercisesCompleted: didExercise,
+                            cvaScore: score.cva,
+                            frontPointsData: frontData,
+                            sidePointsData: sideData
+                        )
+                        modelContext.insert(entry)
                     })
                     .transition(.opacity)
                 case .paywall:
@@ -158,6 +217,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showPostureTips) {
             PostureTipView()
+        }
+        .sheet(isPresented: $showJournal) {
+            JournalView(showJournal: $showJournal)
         }
     }
 
@@ -240,6 +302,7 @@ struct ContentView: View {
     }
 
     private func finishFrontScan() {
+        frontSnapshot = engine.captureSnapshot(for: .front)
         // Calculate front score
         let shoulderScore = max(0, 100 - abs(engine.shoulderTilt) * 5) // -5 per degree
         let headScore = max(0, 100 - abs(engine.headTilt) * 3)         // -3 per degree offset
@@ -266,6 +329,7 @@ struct ContentView: View {
     }
     
     private func finishSideScan() {
+        sideSnapshot = engine.captureSnapshot(for: .side)
         guard let front = frontScore else { return }
         
         // Use CVA-based scoring (clinical methodology)
@@ -608,6 +672,7 @@ struct FrontResultView: View {
             }
         }
         .padding(.bottom, 40)
+
     }
     
     private var scoreColor: Color {
@@ -623,7 +688,12 @@ struct FinalResultView: View {
     let score: FinalScore
     let onRestart: () -> Void
     let onContinue: () -> Void
+    let onSave: (Bool) -> Void
     
+    @State private var hasSaved = false
+    @State private var exercisesCompleted = false
+
+
     @AppStorage("hasCompletedFirstScan") private var hasCompletedFirstScan = false
 
     var body: some View {
@@ -695,6 +765,39 @@ struct FinalResultView: View {
                     .cornerRadius(12)
             }
             
+            if !hasSaved {
+                Toggle("I completed the quick fix exercises", isOn: $exercisesCompleted)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 10)
+                    
+                Button(action: {
+                    onSave(exercisesCompleted)
+                    hasSaved = true
+                }) {
+                    HStack {
+                        Image(systemName: "square.and.arrow.down")
+                        Text("Save to Journal")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.blue.opacity(0.8))
+                    .cornerRadius(12)
+                }
+                .padding(.horizontal, 40)
+            } else {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("Saved to Journal")
+                }
+                .font(.headline)
+                .foregroundColor(.green)
+                .padding()
+            }
+            
             // Disclaimer for EU/Medical Device Compliance
             Text("For wellness purposes only. Not a medical device.")
                 .font(.caption2)
@@ -723,9 +826,11 @@ struct FinalResultView: View {
                     }
                 }
             }
+
+    }
         }
     }
-}
+
 
 // MARK: - Paywall View
 
