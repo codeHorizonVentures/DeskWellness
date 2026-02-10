@@ -199,6 +199,8 @@ struct ContentView: View {
                             sidePointsData: sideData
                         )
                         modelContext.insert(entry)
+                    }, onShowJournal: {
+                        showJournal = true
                     })
                     .transition(.opacity)
                 case .paywall:
@@ -694,147 +696,228 @@ struct FinalResultView: View {
     let onRestart: () -> Void
     let onContinue: () -> Void
     let onSave: (Bool) -> Void
+    let onShowJournal: () -> Void
     
     @State private var hasSaved = false
     @State private var exercisesCompleted = false
-
-
+    @State private var showContent = false
+    
     @AppStorage("hasCompletedFirstScan") private var hasCompletedFirstScan = false
-
+    
     var body: some View {
-        VStack(spacing: 20) {
-            VStack(spacing: 10) {
-                Text("Your Desk Score")
-                    .textCase(.uppercase)
-                    .font(.caption)
-                    .foregroundColor(.gray)
-
-                ZStack {
-                    Circle()
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 10)
-                        .frame(width: 120, height: 120)
-                    Circle()
-                        .trim(from: 0, to: CGFloat(score.combinedScore) / 100)
-                        .stroke(score.combinedScore > 80 ? Color.green : Color.orange, style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 120, height: 120)
-                    Text("\(score.combinedScore)")
-                        .font(.system(size: 40, weight: .bold))
-                        .foregroundColor(.white)
-                }
-
-                Text(score.combinedScore > 80 ? "Great Posture" : "Needs Improvement")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                
-                // Breakdown
-                VStack(spacing: 8) {
+        ZStack {
+            // Glass background
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea()
+            
+            ScrollView {
+                VStack(spacing: 30) {
+                    
+                    // Header Area
                     HStack {
-                        Text("Shoulder Alignment")
-                            .foregroundColor(.gray)
+                        Button(action: onRestart) {
+                           HStack(spacing: 6) {
+                               Image(systemName: "arrow.counterclockwise")
+                               Text("Restart")
+                           }
+                           .font(.subheadline.weight(.medium))
+                           .foregroundColor(.secondary)
+                           .padding(.horizontal, 12)
+                           .padding(.vertical, 8)
+                           .background(Color.secondary.opacity(0.1))
+                           .clipShape(Capsule())
+                       }
+
                         Spacer()
-                        Text(abs(score.frontScore.shoulderTilt) < 5 ? "✓ Good" : "⚠ Tilted")
-                            .foregroundColor(abs(score.frontScore.shoulderTilt) < 5 ? .green : .orange)
-                    }
-                    HStack {
-                        Text("Head Position")
-                            .foregroundColor(.gray)
+                        
+                        Text("Desk Score")
+                            .font(.system(.headline, design: .rounded))
+                            .foregroundColor(.primary)
+                        
                         Spacer()
-                        Text(abs(score.frontScore.headTilt) < 3 ? "✓ Centered" : "⚠ Tilted")
-                            .foregroundColor(abs(score.frontScore.headTilt) < 3 ? .green : .orange)
-                    }
-                    if let cva = score.cva {
-                        HStack {
-                            Text("Head Alignment")
-                                .foregroundColor(.gray)
-                            Spacer()
-                            Text(PostureConstants.cvaStatus(for: cva))
-                                .foregroundColor(cva >= PostureConstants.cvaNormal ? .green : (cva >= PostureConstants.cvaMildFHP ? .cyan : .orange))
+                        
+                        Button(action: onShowJournal) {
+                            Image(systemName: "book.closed.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(.blue)
+                                .padding(10)
+                                .background(Color.blue.opacity(0.1))
+                                .clipShape(Circle())
                         }
                     }
-                }
-                .font(.subheadline)
-                .padding(.top, 10)
-            }
-            .padding(30)
-            .background(Color.black.opacity(0.8))
-            .cornerRadius(20)
-
-            Button(action: onContinue) {
-                Text("Get Posture Tips")
-                    .font(.headline)
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.white)
-                    .cornerRadius(12)
-            }
-            
-            if !hasSaved {
-                Toggle("I completed the quick fix exercises", isOn: $exercisesCompleted)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 10)
+                    .padding(.horizontal)
+                    .padding(.top, 20)
                     
-                Button(action: {
-                    onSave(exercisesCompleted)
-                    hasSaved = true
-                }) {
-                    HStack {
-                        Image(systemName: "square.and.arrow.down")
-                        Text("Save to Journal")
+                    // Main Score Card
+                    VStack(spacing: 20) {
+                        ZStack {
+                            Circle()
+                                .stroke(Color.secondary.opacity(0.1), lineWidth: 15)
+                                .frame(width: 180, height: 180)
+                            
+                            Circle()
+                                .trim(from: 0, to: showContent ? CGFloat(score.combinedScore) / 100 : 0)
+                                .stroke(
+                                    scoreColor,
+                                    style: StrokeStyle(lineWidth: 15, lineCap: .round)
+                                )
+                                .rotationEffect(.degrees(-90))
+                                .frame(width: 180, height: 180)
+                                .animation(.easeOut(duration: 1.5).delay(0.2), value: showContent)
+                            
+                            VStack(spacing: 4) {
+                                Text("\(Int(score.combinedScore))")
+                                    .font(.system(size: 64, weight: .bold, design: .rounded))
+                                    .foregroundColor(.primary)
+                                
+                                Text(scoreStatus)
+                                    .font(.headline)
+                                    .foregroundColor(scoreColor)
+                            }
+                        }
+                        .padding(.vertical, 10)
+                        
+                        Divider()
+                        
+                        // Breakdown
+                        VStack(spacing: 16) {
+                            ScoreRow(label: "Shoulder Alignment", isGood: abs(score.frontScore.shoulderTilt) < 5, value: abs(score.frontScore.shoulderTilt) < 5 ? "Level" : "Tilted")
+                            ScoreRow(label: "Head Position", isGood: abs(score.frontScore.headTilt) < 3, value: abs(score.frontScore.headTilt) < 3 ? "Centered" : "Tilted")
+                            
+                            if let cva = score.cva {
+                                ScoreRow(label: "Neck Angle", isGood: cva >= PostureConstants.cvaNormal, value: PostureConstants.cvaStatus(for: cva))
+                            }
+                        }
+                        .padding(.bottom, 10)
                     }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.blue.opacity(0.8))
-                    .cornerRadius(12)
+                    .padding(24)
+                    .background(Color(UIColor.systemBackground))
+                    .cornerRadius(24)
+                    .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+                    .padding(.horizontal)
+                    .opacity(showContent ? 1 : 0)
+                    .offset(y: showContent ? 0 : 20)
+                    .animation(.easeOut(duration: 0.6), value: showContent)
+                    
+                    // Actions
+                    VStack(spacing: 16) {
+                        Button(action: onContinue) {
+                            HStack {
+                                Image(systemName: "figure.mind.and.body")
+                                Text("Get Personal Exercises")
+                            }
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .cornerRadius(16)
+                            .shadow(color: .blue.opacity(0.3), radius: 5, x: 0, y: 3)
+                        }
+                        
+                        if !hasSaved {
+                            VStack(spacing: 12) {
+                                Toggle("I completed the quick exercises", isOn: $exercisesCompleted)
+                                    .font(.subheadline)
+                                    .padding(.horizontal, 4)
+                                
+                                Button(action: {
+                                    onSave(exercisesCompleted)
+                                    withAnimation { hasSaved = true }
+                                }) {
+                                    HStack {
+                                        Image(systemName: "square.and.arrow.down")
+                                        Text("Save to Journal")
+                                    }
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color(UIColor.secondarySystemBackground))
+                                    .cornerRadius(16)
+                                }
+                            }
+                            .padding(20)
+                            .background(Color(UIColor.systemBackground))
+                            .cornerRadius(20)
+                            .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                        } else {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                Text("Saved to Journal")
+                            }
+                            .font(.headline)
+                            .foregroundColor(.green)
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color.green.opacity(0.1))
+                            .cornerRadius(16)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .opacity(showContent ? 1 : 0)
+                    .offset(y: showContent ? 0 : 20)
+                    .animation(.easeOut(duration: 0.6).delay(0.2), value: showContent)
+                    
+                    // Footer
+                    Text("For wellness purposes only. Not a medical device.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.bottom, 40)
+                        .opacity(showContent ? 1 : 0)
+                        .animation(.easeOut(duration: 0.6).delay(0.4), value: showContent)
                 }
-                .padding(.horizontal, 40)
-            } else {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                    Text("Saved to Journal")
-                }
-                .font(.headline)
-                .foregroundColor(.green)
-                .padding()
             }
-            
-            // Disclaimer for EU/Medical Device Compliance
-            Text("For wellness purposes only. Not a medical device.")
-                .font(.caption2)
-                .foregroundColor(.gray.opacity(0.6))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-                .padding(.bottom, 10)
-                .padding(.horizontal, 40)
-                .padding(.bottom, 10)
-            
-            Button("Restart Scan") {
-                onRestart()
-            }
-            .foregroundColor(.white.opacity(0.6))
-            .padding(.bottom, 10)
         }
-        .padding(.bottom, 40)
-        .transition(.move(edge: .bottom))
         .onAppear {
+            showContent = true
             if !hasCompletedFirstScan {
                 hasCompletedFirstScan = true
-                // Request review after a delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                     if let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
                         SKStoreReviewController.requestReview(in: scene)
                     }
                 }
             }
-
-    }
         }
     }
+    
+    private var scoreColor: Color {
+        if score.combinedScore > 80 { return .green }
+        if score.combinedScore > 60 { return .orange }
+        return .red
+    }
+    
+    private var scoreStatus: String {
+        if score.combinedScore > 80 { return "Great Posture" }
+        if score.combinedScore > 60 { return "Good Start" }
+        return "Needs Work"
+    }
+}
+
+struct ScoreRow: View {
+    let label: String
+    let isGood: Bool
+    let value: String
+    
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.body)
+                .foregroundColor(.secondary)
+            Spacer()
+            HStack(spacing: 6) {
+                Image(systemName: isGood ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundColor(isGood ? .green : .orange)
+                 Text(value)
+                    .font(.body.weight(.medium))
+                    .foregroundColor(.primary)
+            }
+        }
+    }
+}
 
 
 // MARK: - Paywall View
