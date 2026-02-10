@@ -97,6 +97,17 @@ struct ContentView: View {
                     showDebug: PostureConstants.showDebugOverlay
                 )
             }
+            
+            // LAYER 2.5: Pose Guidance Overlays (When NOT locked)
+            if case .frontScanning = appState {
+                PoseGuidanceOverlay(imageName: "front-pose")
+                    .transition(.opacity)
+            }
+            
+            if case .sideScanning = appState {
+                PoseGuidanceOverlay(imageName: "side-pose")
+                    .transition(.opacity)
+            }
 
             // LAYER 3: The UI Overlay
             VStack {
@@ -473,30 +484,32 @@ struct FrontGuidanceView: View {
     
     var body: some View {
         VStack(spacing: 16) {
-            ZStack {
-                Image(systemName: "viewfinder")
-                    .font(.system(size: 80, weight: .light))
-                    .foregroundColor(.cyan)
-                
-                Image(systemName: "person.fill")
-                    .font(.system(size: 36))
-                    .foregroundColor(.cyan)
-            }
-            .scaleEffect(isAnimating ? 1.05 : 1.0)
-            .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: isAnimating)
+            // Visuals moved to PoseGuidanceOverlay
             
-            VStack(spacing: 6) {
+            VStack(spacing: 8) {
                 Text("Face the camera")
-                    .font(.title3.weight(.semibold))
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
                 
                 Text("Stand naturally and look straight ahead")
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.body)
+                    .foregroundColor(.white.opacity(0.9))
+                    .multilineTextAlignment(.center)
+                    .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
             }
         }
-        .padding(24)
-        .background(RoundedRectangle(cornerRadius: 20).fill(Color.black.opacity(0.6)))
+        .padding(.vertical, 30)
+        .padding(.horizontal, 40)
+        .background(
+            LinearGradient(
+                colors: [Color.black.opacity(0), Color.black.opacity(0.8)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        // Ensure it sits at the bottom nicely
+        .frame(maxWidth: .infinity)
         .onAppear { isAnimating = true }
     }
 }
@@ -543,48 +556,31 @@ struct SideProfileGuidanceView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            HStack(spacing: 24) {
-                // Front-facing person (faded)
-                ZStack {
-                    Image(systemName: "viewfinder")
-                        .font(.system(size: 50, weight: .light))
-                        .foregroundColor(.white.opacity(0.3))
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.white.opacity(0.4))
-                }
+            // Visuals moved to PoseGuidanceOverlay
 
-                // Arrow
-                Image(systemName: "arrow.turn.right.up")
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundColor(.cyan)
-                    .rotationEffect(.degrees(isAnimating ? 0 : -10))
-                    .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: isAnimating)
-
-                // Side profile
-                ZStack {
-                    Image(systemName: "viewfinder")
-                        .font(.system(size: 60, weight: .light))
-                        .foregroundColor(.cyan)
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 28))
-                        .foregroundColor(.cyan)
-                        .rotation3DEffect(.degrees(50), axis: (x: 0, y: 1, z: 0))
-                }
-            }
-
-            VStack(spacing: 6) {
-                Text("Turn sideways to the camera")
-                    .font(.title3.weight(.semibold))
+            VStack(spacing: 8) {
+                Text("Turn sideways")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+                
                 Text("Show your side profile for forward head check")
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.body)
+                    .foregroundColor(.white.opacity(0.9))
+                    .multilineTextAlignment(.center)
+                    .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
             }
         }
-        .padding(24)
-        .background(RoundedRectangle(cornerRadius: 20).fill(Color.black.opacity(0.6)))
-        .padding(.horizontal, 20)
+        .padding(.vertical, 30)
+        .padding(.horizontal, 40)
+        .background(
+            LinearGradient(
+                colors: [Color.black.opacity(0), Color.black.opacity(0.8)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        .frame(maxWidth: .infinity)
     }
 }
 
