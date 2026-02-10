@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AVFoundation
+import AudioToolbox
 import StoreKit
 
 // MARK: - App State Machine
@@ -312,6 +313,12 @@ struct ContentView: View {
         }
     }
 
+    private func playSuccessSound() {
+        // Play system sound "Tink" (ID 1057) or similar
+        // 1057 = Tink, 1001 = MailSent, 1103 = Tock
+        AudioServicesPlaySystemSound(1057)
+    }
+    
     private func finishFrontScan() {
         frontSnapshot = engine.captureSnapshot(for: .front)
         // Calculate front score
@@ -332,6 +339,7 @@ struct ContentView: View {
         
         frontScore = score
         feedbackGenerator.notificationOccurred(.success)
+        playSuccessSound()
         engine.stop()
         
         withAnimation {
@@ -355,6 +363,7 @@ struct ContentView: View {
         )
         
         feedbackGenerator.notificationOccurred(.success)
+        playSuccessSound()
         engine.stop()
         
         withAnimation {
