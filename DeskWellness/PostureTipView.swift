@@ -7,6 +7,8 @@
 
 import SwiftUI
 
+import AVKit
+
 // MARK: - Models
 
 struct PostureTip: Identifiable {
@@ -14,6 +16,7 @@ struct PostureTip: Identifiable {
     let title: String
     let description: String
     let iconName: String
+    let videoName: String? // Added video support
     let duration: TimeInterval
     let benefit: String
     let color: Color
@@ -27,6 +30,7 @@ struct PostureTipsData {
             title: "Chin Tucks",
             description: "Gently tuck your chin straight back like you're making a double chin. Feel the stretch at the base of your skull. Hold for 2 seconds, release.",
             iconName: "figure.mind.and.body",
+            videoName: "chin-tucks-exercise-animation",
             duration: 60,
             benefit: "Strengthens deep neck flexors to fix Forward Head Posture.",
             color: .blue
@@ -35,6 +39,7 @@ struct PostureTipsData {
             title: "Wall Angels",
             description: "Stand with back against a wall. Arms in 'W' shape. Slide arms up to 'Y' while keeping elbows and wrists touching the wall.",
             iconName: "figure.arms.open",
+            videoName: "wall-angels-animation",
             duration: 60,
             benefit: "Corrects rounded shoulders and opens the chest.",
             color: .orange
@@ -43,6 +48,7 @@ struct PostureTipsData {
             title: "Doorway Stretch",
             description: "Place forearms on a door frame at 90 degrees. Step through gently until you feel a stretch in your chest. Hold.",
             iconName: "figure.walk",
+            videoName: "doorway-streach-animation",
             duration: 45,
             benefit: "Loosens tight pectoral muscles that pull shoulders forward.",
             color: .green
@@ -142,37 +148,49 @@ struct ExerciseCard: View {
     
     var body: some View {
         VStack(spacing: 24) {
-            // Icon
-            ZStack {
-                Circle()
-                    .fill(tip.color.opacity(0.2))
-                    .frame(width: 100, height: 100)
-                Image(systemName: tip.iconName)
-                    .font(.system(size: 40))
-                    .foregroundColor(tip.color)
-            }
-            .padding(.top, 20)
-            
-            // Text
-            VStack(spacing: 8) {
-                Text(tip.title)
-                    .font(.title.bold())
-                    .foregroundColor(.white)
-                
-                Text(tip.benefit)
-                    .font(.subheadline)
-                    .foregroundColor(tip.color)
-                    .fontWeight(.medium)
+            // Media (Video or Icon)
+            if let videoName = tip.videoName {
+                LoopingVideoPlayer(videoName: videoName)
+                    .frame(height: 220)
+                    .cornerRadius(16)
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.1), lineWidth: 1))
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(tip.color.opacity(0.2))
+                        .frame(width: 100, height: 100)
+                    Image(systemName: tip.iconName)
+                        .font(.system(size: 40))
+                        .foregroundColor(tip.color)
+                }
+                .padding(.top, 20)
             }
             
-            // Instructions
-            Text(tip.description)
-                .font(.body)
-                .foregroundColor(.white.opacity(0.9))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-                .padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.1)))
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Text
+                    VStack(spacing: 8) {
+                        Text(tip.title)
+                            .font(.title.bold())
+                            .foregroundColor(.white)
+                        
+                        Text(tip.benefit)
+                            .font(.subheadline)
+                            .foregroundColor(tip.color)
+                            .fontWeight(.medium)
+                            .multilineTextAlignment(.center)
+                    }
+                    
+                    // Instructions
+                    Text(tip.description)
+                        .font(.body)
+                        .foregroundColor(.white.opacity(0.9))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                        .padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.1)))
+                }
+            }
             
             Spacer()
             

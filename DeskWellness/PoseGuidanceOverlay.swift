@@ -42,6 +42,7 @@ struct PoseGuidanceOverlay: View {
             }
         }
         .allowsHitTesting(false) // Pass touches through to camera/buttons
+        .ignoresSafeArea()
     }
     
     @State private var isAnimating = false
