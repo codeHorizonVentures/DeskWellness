@@ -1,2 +1,11 @@
 # DeskWellness
-DeskWellness is a productivity and health-focused desktop application designed to help users maintain physical and mental well-being during long hours at the computer. The app provides periodic reminders, guided exercises, and wellness tips to reduce stress, stiffness, and pain associated with sedentary desk work.
+DeskWellness is an iPhone-first general-wellness app for desk workers.
+
+The product direction is:
+
+- help people interrupt long sitting sessions with short movement resets
+- help desk workers manage neck, shoulder, and lower-back discomfort during the workday
+- build gentle posture awareness without medical or clinical claims
+- keep processing local and privacy behavior explicit
+
+The current repo is still an early prototype. The intended MVP is a calm desk-discomfort reset coach for desk workers, with camera-based posture check-ins treated as optional and secondary rather than the main daily workflow.
