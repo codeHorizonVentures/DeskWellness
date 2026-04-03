@@ -499,6 +499,7 @@ struct HomeView: View {
                         .background(Color.cyan)
                         .cornerRadius(16)
                 }
+                .accessibilityIdentifier("home_start_quick_reset")
 
                 Button(action: onStartCheckIn) {
                     Label("Optional Check-In", systemImage: "camera.viewfinder")
@@ -513,12 +514,14 @@ struct HomeView: View {
                         )
                         .cornerRadius(16)
                 }
+                .accessibilityIdentifier("home_optional_check_in")
 
                 Button(action: onOpenJournal) {
                     Label("Open Reset Journal", systemImage: "book.closed")
                         .font(.subheadline.weight(.semibold))
                         .foregroundColor(.white.opacity(0.9))
                 }
+                .accessibilityIdentifier("home_open_reset_journal")
                 .padding(.top, 6)
             }
             .padding(.horizontal, 28)

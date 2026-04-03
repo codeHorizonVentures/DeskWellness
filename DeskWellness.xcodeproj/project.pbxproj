@@ -6,9 +6,27 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		7C0000062F50000100000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6A087E572DC2563F008C6112 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6A087E5E2DC2563F008C6112;
+			remoteInfo = DeskWellness;
+		};
+		7D0000062F50000200000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6A087E572DC2563F008C6112 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6A087E5E2DC2563F008C6112;
+			remoteInfo = DeskWellness;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		6A087E5F2DC2563F008C6112 /* DeskWellness.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DeskWellness.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7C0000012F50000100000001 /* DeskWellnessTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeskWellnessTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7D0000012F50000200000001 /* DeskWellnessUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeskWellnessUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -17,14 +35,19 @@
 			path = DeskWellness;
 			sourceTree = "<group>";
 		};
+		7C0000022F50000100000001 /* DeskWellnessTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DeskWellnessTests;
+			sourceTree = "<group>";
+		};
 		7C00000C2F50000100000001 /* DeskWellnessShared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = DeskWellnessShared;
 			sourceTree = "<group>";
 		};
-		7C0000022F50000100000001 /* DeskWellnessTests */ = {
+		7D0000022F50000200000001 /* DeskWellnessUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = DeskWellnessTests;
+			path = DeskWellnessUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -44,6 +67,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7D0000032F50000200000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -53,6 +83,7 @@
 				6A087E612DC2563F008C6112 /* DeskWellness */,
 				7C00000C2F50000100000001 /* DeskWellnessShared */,
 				7C0000022F50000100000001 /* DeskWellnessTests */,
+				7D0000022F50000200000001 /* DeskWellnessUITests */,
 				6A087E602DC2563F008C6112 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -62,6 +93,7 @@
 			children = (
 				6A087E5F2DC2563F008C6112 /* DeskWellness.app */,
 				7C0000012F50000100000001 /* DeskWellnessTests.xctest */,
+				7D0000012F50000200000001 /* DeskWellnessUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -106,8 +138,8 @@
 				7C0000072F50000100000001 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				7C00000C2F50000100000001 /* DeskWellnessShared */,
 				7C0000022F50000100000001 /* DeskWellnessTests */,
+				7C00000C2F50000100000001 /* DeskWellnessShared */,
 			);
 			name = DeskWellnessTests;
 			packageProductDependencies = (
@@ -115,6 +147,29 @@
 			productName = DeskWellnessTests;
 			productReference = 7C0000012F50000100000001 /* DeskWellnessTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		7D0000082F50000200000001 /* DeskWellnessUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7D00000B2F50000200000001 /* Build configuration list for PBXNativeTarget "DeskWellnessUITests" */;
+			buildPhases = (
+				7D0000052F50000200000001 /* Sources */,
+				7D0000032F50000200000001 /* Frameworks */,
+				7D0000042F50000200000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7D0000072F50000200000001 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				7D0000022F50000200000001 /* DeskWellnessUITests */,
+			);
+			name = DeskWellnessUITests;
+			packageProductDependencies = (
+			);
+			productName = DeskWellnessUITests;
+			productReference = 7D0000012F50000200000001 /* DeskWellnessUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
@@ -130,6 +185,10 @@
 						CreatedOnToolsVersion = 16.3;
 					};
 					7C0000082F50000100000001 = {
+						CreatedOnToolsVersion = 16.3;
+						TestTargetID = 6A087E5E2DC2563F008C6112;
+					};
+					7D0000082F50000200000001 = {
 						CreatedOnToolsVersion = 16.3;
 						TestTargetID = 6A087E5E2DC2563F008C6112;
 					};
@@ -151,6 +210,7 @@
 			targets = (
 				6A087E5E2DC2563F008C6112 /* DeskWellness */,
 				7C0000082F50000100000001 /* DeskWellnessTests */,
+				7D0000082F50000200000001 /* DeskWellnessUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -164,6 +224,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7C0000042F50000100000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7D0000042F50000200000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -187,23 +254,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-/* End PBXSourcesBuildPhase section */
-
-/* Begin PBXContainerItemProxy section */
-		7C0000062F50000100000001 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 6A087E572DC2563F008C6112 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 6A087E5E2DC2563F008C6112;
-			remoteInfo = DeskWellness;
+		7D0000052F50000200000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
-/* End PBXContainerItemProxy section */
+/* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
 		7C0000072F50000100000001 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 6A087E5E2DC2563F008C6112 /* DeskWellness */;
 			targetProxy = 7C0000062F50000100000001 /* PBXContainerItemProxy */;
+		};
+		7D0000072F50000200000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6A087E5E2DC2563F008C6112 /* DeskWellness */;
+			targetProxy = 7D0000062F50000200000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -445,6 +514,45 @@
 			};
 			name = Release;
 		};
+		7D0000092F50000200000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				MARKETING_VERSION = 0;
+				PRODUCT_BUNDLE_IDENTIFIER = chv.desk.wellness.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = DeskWellness;
+			};
+			name = Debug;
+		};
+		7D00000A2F50000200000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				MARKETING_VERSION = 0;
+				PRODUCT_BUNDLE_IDENTIFIER = chv.desk.wellness.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = DeskWellness;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -471,6 +579,15 @@
 			buildConfigurations = (
 				7C0000092F50000100000001 /* Debug */,
 				7C00000A2F50000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7D00000B2F50000200000001 /* Build configuration list for PBXNativeTarget "DeskWellnessUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7D0000092F50000200000001 /* Debug */,
+				7D00000A2F50000200000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

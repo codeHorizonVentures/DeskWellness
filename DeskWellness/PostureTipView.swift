@@ -79,6 +79,7 @@ struct PostureTipView: View {
                         Text("3-Minute Desk Reset")
                             .font(.title2.bold())
                             .foregroundColor(.white)
+                            .accessibilityIdentifier("desk_reset_screen")
                         Text("Neck, shoulders, and back")
                             .font(.subheadline)
                             .foregroundColor(.white.opacity(0.7))
@@ -226,6 +227,7 @@ struct ExerciseCard: View {
                     .padding(.horizontal, 40)
                     .background(Capsule().fill(Color.gray.opacity(0.3)))
             }
+            .accessibilityIdentifier("desk_reset_skip_button")
             .padding(.bottom, 20)
         }
         .padding()

@@ -35,6 +35,20 @@
                ReferencedContainer = "container:DeskWellness.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "7D0000082F50000200000001"
+               BuildableName = "DeskWellnessUITests.xctest"
+               BlueprintName = "DeskWellnessUITests"
+               ReferencedContainer = "container:DeskWellness.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -51,6 +65,17 @@
                BlueprintIdentifier = "7C0000082F50000100000001"
                BuildableName = "DeskWellnessTests.xctest"
                BlueprintName = "DeskWellnessTests"
+               ReferencedContainer = "container:DeskWellness.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "7D0000082F50000200000001"
+               BuildableName = "DeskWellnessUITests.xctest"
+               BlueprintName = "DeskWellnessUITests"
                ReferencedContainer = "container:DeskWellness.xcodeproj">
             </BuildableReference>
          </TestableReference>
