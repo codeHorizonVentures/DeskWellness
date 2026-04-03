@@ -54,6 +54,16 @@ struct ResetConsistencySummary {
         return "\(completedResets) of \(weeklyGoal) completed resets so far."
     }
 
+    static var screenshotDemo: ResetConsistencySummary {
+        ResetConsistencySummary(
+            weeklyGoal: 3,
+            completedResets: 2,
+            loggedResets: 3,
+            checkIns: 1,
+            activeDays: 2
+        )
+    }
+
     static func build(
         from entries: [ResetConsistencyEntry],
         now: Date = Date(),

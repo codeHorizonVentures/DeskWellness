@@ -62,6 +62,7 @@ struct ContentView: View {
     @State private var sideSnapshot: UIImage?
     @State private var showOnboarding = false
     @State private var decidedOnboardingForThisLaunch = false
+    private let launchArguments = ProcessInfo.processInfo.arguments
 
     let scanTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     let synthesizer = AVSpeechSynthesizer()
@@ -119,7 +120,11 @@ struct ContentView: View {
             // LAYER 3: The UI Overlay
             VStack {
                 // Top Bar
-                TopBarView(appState: appState, engine: engine)
+                TopBarView(
+                    appState: appState,
+                    engine: engine,
+                    shouldAutoOpenReminderSettings: launchArguments.contains("-ResetMinuteOpenReminderSettings")
+                )
 
                 Spacer()
 
@@ -253,14 +258,17 @@ struct ContentView: View {
     }
 
     private var consistencySummary: ResetConsistencySummary {
-        ResetConsistencySummary.build(from: entries.map(\.resetConsistencyEntry))
+        if launchArguments.contains("-ResetMinuteDemoConsistency") {
+            return .screenshotDemo
+        }
+
+        return ResetConsistencySummary.build(from: entries.map(\.resetConsistencyEntry))
     }
 
     private func decideOnboardingPresentationIfNeeded() {
         guard !decidedOnboardingForThisLaunch else { return }
         decidedOnboardingForThisLaunch = true
 
-        let launchArguments = ProcessInfo.processInfo.arguments
         if launchArguments.contains("-ResetMinuteSkipOnboarding") {
             return
         }
@@ -433,8 +441,10 @@ struct ContentView: View {
 struct TopBarView: View {
     let appState: AppState
     let engine: PostureEngine
+    let shouldAutoOpenReminderSettings: Bool
     @AppStorage(ReminderScheduler.enabledKey) private var remindersEnabled = false
     @State private var showReminderSettings = false
+    @State private var didAutoOpenReminderSettings = false
     
     var body: some View {
         HStack {
@@ -468,6 +478,11 @@ struct TopBarView: View {
         .padding()
         .sheet(isPresented: $showReminderSettings) {
             ReminderSettingsView()
+        }
+        .task {
+            guard shouldAutoOpenReminderSettings, !didAutoOpenReminderSettings else { return }
+            didAutoOpenReminderSettings = true
+            showReminderSettings = true
         }
     }
     
