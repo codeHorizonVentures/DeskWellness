@@ -13,6 +13,7 @@ import StoreKit
 // MARK: - App State Machine
 
 enum AppState {
+    case home
     case frontScanning              // Phase 1: Front-facing detection
     case frontResult(FrontScore)    // Show front results, prompt for side if needed
     case sideScanning               // Phase 2: Side profile detection (optional)
@@ -46,7 +47,7 @@ struct FinalScore {
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject private var engine = PostureEngine()
-    @State private var appState: AppState = .frontScanning
+    @State private var appState: AppState = .home
     @State private var scanDuration: Double = 0.0
     @State private var feedbackGenerator = UINotificationFeedbackGenerator()
     @State private var lastSpeechTime: Date = .distantPast
@@ -119,6 +120,13 @@ struct ContentView: View {
 
                 // Bottom Area Changes based on State
                 switch appState {
+                case .home:
+                    HomeView(
+                        onStartQuickReset: { showPostureTips = true },
+                        onStartCheckIn: { beginCheckInFlow() },
+                        onOpenJournal: { showJournal = true }
+                    )
+
                 case .frontScanning:
                     FrontScanningView(
                         shoulderTilt: engine.shoulderTilt,
@@ -152,10 +160,7 @@ struct ContentView: View {
                     
                 case .finalResult(let score):
                     FinalResultView(score: score, onRestart: {
-                        engine.reset()
-                        scanDuration = 0
-                        appState = .frontScanning
-                        engine.start()
+                        resetToHome()
                     }, onContinue: {
                         showPostureTips = true
                     }, onSave: { didExercise in
@@ -205,16 +210,10 @@ struct ContentView: View {
                     .transition(.opacity)
                 case .paywall:
                     PaywallView {
-                        engine.reset()
-                        scanDuration = 0
-                        appState = .frontScanning
-                        engine.start()
+                        resetToHome()
                     }
                 }
             }
-        }
-        .onAppear {
-            checkCameraPermission()
         }
         .onReceive(scanTimer) { _ in
             handleScanTimer()
@@ -242,15 +241,25 @@ struct ContentView: View {
 
     // MARK: - Camera Permission
 
-    private func checkCameraPermission() {
+    private func beginCheckInFlow() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
+            scanDuration = 0
+            frontScore = nil
             engine.start()
+            withAnimation {
+                appState = .frontScanning
+            }
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { granted in
                 DispatchQueue.main.async {
                     if granted {
+                        scanDuration = 0
+                        frontScore = nil
                         engine.start()
+                        withAnimation {
+                            appState = .frontScanning
+                        }
                     } else {
                         showCameraPermissionAlert = true
                     }
@@ -260,6 +269,17 @@ struct ContentView: View {
             showCameraPermissionAlert = true
         @unknown default:
             showCameraPermissionAlert = true
+        }
+    }
+
+    private func resetToHome() {
+        engine.reset()
+        scanDuration = 0
+        frontScore = nil
+        frontSnapshot = nil
+        sideSnapshot = nil
+        withAnimation {
+            appState = .home
         }
     }
 
@@ -389,7 +409,7 @@ struct TopBarView: View {
         HStack {
             Image(systemName: "figure.mind.and.body")
                 .foregroundColor(.white)
-            Text("DeskWellness")
+            Text("ResetMinute")
                 .font(.headline)
                 .foregroundColor(.white)
             Spacer()
@@ -440,6 +460,72 @@ struct TopBarView: View {
         default:
             return .gray
         }
+    }
+}
+
+struct HomeView: View {
+    let onStartQuickReset: () -> Void
+    let onStartCheckIn: () -> Void
+    let onOpenJournal: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            VStack(spacing: 12) {
+                Text("ResetMinute")
+                    .font(.system(size: 38, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+
+                Text("Short desk resets for neck, shoulders, and back during long workdays.")
+                    .font(.body)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.white.opacity(0.86))
+
+                Text("Camera check-ins stay optional. The daily default is a fast reset.")
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.white.opacity(0.7))
+            }
+            .padding(.horizontal, 32)
+
+            VStack(spacing: 14) {
+                Button(action: onStartQuickReset) {
+                    Label("Start Quick Reset", systemImage: "figure.cooldown")
+                        .font(.headline)
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.cyan)
+                        .cornerRadius(16)
+                }
+
+                Button(action: onStartCheckIn) {
+                    Label("Optional Check-In", systemImage: "camera.viewfinder")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.white.opacity(0.14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                        )
+                        .cornerRadius(16)
+                }
+
+                Button(action: onOpenJournal) {
+                    Label("Open Reset Journal", systemImage: "book.closed")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(.white.opacity(0.9))
+                }
+                .padding(.top, 6)
+            }
+            .padding(.horizontal, 28)
+
+            Spacer()
+        }
+        .padding(.bottom, 40)
     }
 }
 
