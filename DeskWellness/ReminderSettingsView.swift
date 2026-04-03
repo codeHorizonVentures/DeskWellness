@@ -101,6 +101,7 @@ struct ReminderSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .accessibilityIdentifier("reminder_settings_screen")
             .navigationTitle("Desk Reset Reminders")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

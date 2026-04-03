@@ -243,7 +243,7 @@ struct ContentView: View {
             PostureTipView()
         }
         .sheet(isPresented: $showJournal) {
-            JournalView(showJournal: $showJournal)
+            JournalView(showJournal: $showJournal, previewEntries: previewJournalEntries)
         }
         .fullScreenCover(isPresented: $showOnboarding) {
             ResetMinuteOnboardingView {
@@ -265,16 +265,33 @@ struct ContentView: View {
         return ResetConsistencySummary.build(from: entries.map(\.resetConsistencyEntry))
     }
 
+    private var previewJournalEntries: [DailyEntry]? {
+        if launchArguments.contains("-ResetMinuteDemoJournalEntries") {
+            return DailyEntry.screenshotDemoEntries
+        }
+
+        return nil
+    }
+
     private func decideOnboardingPresentationIfNeeded() {
         guard !decidedOnboardingForThisLaunch else { return }
         decidedOnboardingForThisLaunch = true
 
         if launchArguments.contains("-ResetMinuteSkipOnboarding") {
+            if launchArguments.contains("-ResetMinuteOpenJournal") {
+                showJournal = true
+            }
             return
         }
 
-        if launchArguments.contains("-ResetMinuteForceOnboarding") || !hasSeenOnboarding {
+        let shouldShowOnboarding = launchArguments.contains("-ResetMinuteForceOnboarding") || !hasSeenOnboarding
+        if shouldShowOnboarding {
             showOnboarding = true
+            return
+        }
+
+        if launchArguments.contains("-ResetMinuteOpenJournal") {
+            showJournal = true
         }
     }
 

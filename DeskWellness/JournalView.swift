@@ -11,31 +11,53 @@ import SwiftData
 struct JournalView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \DailyEntry.date, order: .reverse) private var entries: [DailyEntry]
-    
+    let previewEntries: [DailyEntry]?
     @Binding var showJournal: Bool // To control navigation from ContentView if needed
+
+    init(showJournal: Binding<Bool>, previewEntries: [DailyEntry]? = nil) {
+        self._showJournal = showJournal
+        self.previewEntries = previewEntries
+    }
+
+    private var displayEntries: [DailyEntry] {
+        previewEntries ?? entries
+    }
+
+    private var isPreviewing: Bool {
+        previewEntries != nil
+    }
     
     var body: some View {
         NavigationView {
             List {
-                if entries.isEmpty {
+                if displayEntries.isEmpty {
                     ContentUnavailableView(
                         "No Entries Yet",
                         systemImage: "notebook",
                         description: Text("Complete a check-in or reset to start tracking your routine.")
                     )
                 } else {
-                    JournalSummaryCard(entries: entries)
+                    JournalSummaryCard(entries: displayEntries)
                         .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 8, trailing: 16))
                         .listRowSeparator(.hidden)
 
-                    ForEach(entries) { entry in
-                        NavigationLink(destination: EntryDetailView(entry: entry)) {
-                            EntryRow(entry: entry)
+                    if isPreviewing {
+                        ForEach(displayEntries) { entry in
+                            NavigationLink(destination: EntryDetailView(entry: entry)) {
+                                EntryRow(entry: entry)
+                            }
                         }
+                    } else {
+                        ForEach(displayEntries) { entry in
+                            NavigationLink(destination: EntryDetailView(entry: entry)) {
+                                EntryRow(entry: entry)
+                            }
+                        }
+                        .onDelete(perform: deleteEntries)
                     }
-                    .onDelete(perform: deleteEntries)
                 }
             }
+            .accessibilityIdentifier("journal_screen")
             .navigationTitle("Reset Journal")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -48,7 +70,7 @@ struct JournalView: View {
     private func deleteEntries(offsets: IndexSet) {
         withAnimation {
             for index in offsets {
-                let entry = entries[index]
+                let entry = displayEntries[index]
                 let fileManager = FileManager.default
                 let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 

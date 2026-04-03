@@ -101,3 +101,29 @@ class DailyEntry {
         )
     }
 }
+
+extension DailyEntry {
+    static var screenshotDemoEntries: [DailyEntry] {
+        [
+            DailyEntry(
+                date: Date().addingTimeInterval(-3_600),
+                type: .workout,
+                note: "Quick shoulder reset between calls.",
+                exercisesCompleted: true
+            ),
+            DailyEntry(
+                date: Date().addingTimeInterval(-86_400),
+                type: .scan,
+                note: "Optional check-in after a long desk session.",
+                exercisesCompleted: false,
+                cvaScore: 74
+            ),
+            DailyEntry(
+                date: Date().addingTimeInterval(-172_800),
+                type: .workout,
+                note: "Lower-back reset after an afternoon sprint.",
+                exercisesCompleted: true
+            )
+        ]
+    }
+}
