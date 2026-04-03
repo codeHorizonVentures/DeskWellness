@@ -108,7 +108,7 @@ struct MagicMirrorView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("DeskWellness needs camera access to analyze your posture. Please enable it in Settings.")
+            Text("ResetMinute uses the camera for optional check-ins. Images and pose data stay on your device and are only saved locally if you choose to add a check-in to your journal.")
         }
     }
 

@@ -21,7 +21,7 @@ struct JournalView: View {
                     ContentUnavailableView(
                         "No Entries Yet",
                         systemImage: "notebook",
-                        description: Text("Complete a scan or log a workout to allow tracking your progress.")
+                        description: Text("Complete a check-in or reset to start tracking your routine.")
                     )
                 } else {
                     // Contribution Graph Header
@@ -37,7 +37,7 @@ struct JournalView: View {
                     .onDelete(perform: deleteEntries)
                 }
             }
-            .navigationTitle("Pose Journal")
+            .navigationTitle("Reset Journal")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     NavigationLink(destination: AddEntryView()) {
@@ -83,7 +83,7 @@ struct EntryRow: View {
                 .frame(width: 32)
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(entry.type == .scan ? "Posture Scan" : "Workout Log")
+                Text(entry.type == .scan ? "Check-In" : "Reset Log")
                     .font(.headline)
                 Text(entry.formattedDate)
                     .font(.caption)
@@ -123,7 +123,7 @@ struct EntryDetailView: View {
                     Image(systemName: entry.iconName)
                         .font(.title)
                         .foregroundColor(entry.color)
-                    Text(entry.type == .scan ? "Posture Scan" : "Workout Log")
+                    Text(entry.type == .scan ? "Check-In" : "Reset Log")
                         .font(.largeTitle.bold())
                     Spacer()
                     Text(entry.formattedDate)
@@ -210,14 +210,14 @@ struct EntryDetailView: View {
                 }
                 
                 // Exercise Status
-                Toggle("Exercises Completed", isOn: $entry.exercisesCompleted)
+                Toggle("Reset Completed", isOn: $entry.exercisesCompleted)
                     .padding(.vertical)
                 
                 // Stats
                 if let score = entry.cvaScore {
                     HStack {
                         VStack(alignment: .leading) {
-                            Text("CVA Score")
+                            Text("Side Check")
                                 .font(.caption)
                                 .textCase(.uppercase)
                                 .foregroundColor(.gray)
@@ -283,15 +283,15 @@ struct AddEntryView: View {
         Form {
             Section(header: Text("Type")) {
                 Picker("Type", selection: $type) {
-                    Text("Workout").tag(EntryType.workout)
-                    Text("Scan (Manual)").tag(EntryType.scan)
+                    Text("Reset").tag(EntryType.workout)
+                    Text("Check-In (Manual)").tag(EntryType.scan)
                 }
                 .pickerStyle(SegmentedPickerStyle())
             }
             
             Section(header: Text("Details")) {
-                TextField("Notes (e.g., 3 sets of Chin Tucks)", text: $note)
-                Toggle("Completed Exercises", isOn: $exercisesCompleted)
+                TextField("Notes (e.g., neck reset after a long meeting)", text: $note)
+                Toggle("Reset Completed", isOn: $exercisesCompleted)
             }
         }
         .navigationTitle("New Entry")

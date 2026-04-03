@@ -32,7 +32,7 @@ struct PostureTipsData {
             iconName: "figure.mind.and.body",
             videoName: "chin-tucks-exercise-animation",
             duration: 60,
-            benefit: "Strengthens deep neck flexors to fix Forward Head Posture.",
+            benefit: "Helps ease neck tension during long desk sessions.",
             color: .blue
         ),
         PostureTip(
@@ -41,7 +41,7 @@ struct PostureTipsData {
             iconName: "figure.arms.open",
             videoName: "wall-angels-animation",
             duration: 60,
-            benefit: "Corrects rounded shoulders and opens the chest.",
+            benefit: "Helps open the chest and upper back after screen time.",
             color: .orange
         ),
         PostureTip(
@@ -50,7 +50,7 @@ struct PostureTipsData {
             iconName: "figure.walk",
             videoName: "doorway-streach-animation",
             duration: 45,
-            benefit: "Loosens tight pectoral muscles that pull shoulders forward.",
+            benefit: "Helps loosen the chest and shoulders after sitting.",
             color: .green
         )
     ]
@@ -75,7 +75,7 @@ struct PostureTipView: View {
             VStack(spacing: 20) {
                 // Header
                 HStack {
-                    Text("The 3-Minute Fix")
+                    Text("The 3-Minute Reset")
                         .font(.title2.bold())
                         .foregroundColor(.white)
                     Spacer()
@@ -263,7 +263,7 @@ struct CompletionView: View {
                     .font(.largeTitle.bold())
                     .foregroundColor(.white)
                 
-                Text("You've taken a big step towards better posture today.")
+                Text("You've finished a quick reset for today's desk session.")
                     .font(.body)
                     .foregroundColor(.gray)
                     .multilineTextAlignment(.center)

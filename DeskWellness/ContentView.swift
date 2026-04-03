@@ -190,7 +190,7 @@ struct ContentView: View {
                         // Create Entry
                         let entry = DailyEntry(
                             type: .scan,
-                            note: "Posture Scan Result",
+                            note: "Desk Check-In",
                             photoPath: sidePath,
                             frontPhotoPath: frontPath,
                             exercisesCompleted: didExercise,
@@ -227,13 +227,16 @@ struct ContentView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("DeskWellness needs camera access to analyze your posture. Please enable it in Settings.")
+            Text("ResetMinute uses the camera for optional check-ins. Images and pose data stay on your device and are only saved locally if you choose Save to Journal.")
         }
         .sheet(isPresented: $showPostureTips) {
             PostureTipView()
         }
         .sheet(isPresented: $showJournal) {
             JournalView(showJournal: $showJournal)
+        }
+        .task {
+            try? await ReminderScheduler.syncFromDefaults()
         }
     }
 
@@ -353,7 +356,7 @@ struct ContentView: View {
         sideSnapshot = engine.captureSnapshot(for: .side)
         guard let front = frontScore else { return }
         
-        // Use CVA-based scoring (clinical methodology)
+        // Combine the front check-in with the optional side-view estimate.
         let cvaScore = PostureConstants.cvaScore(for: engine.cva)
         let combinedScore = (front.score + cvaScore) / 2
         
@@ -379,6 +382,8 @@ struct ContentView: View {
 struct TopBarView: View {
     let appState: AppState
     let engine: PostureEngine
+    @AppStorage(ReminderScheduler.enabledKey) private var remindersEnabled = false
+    @State private var showReminderSettings = false
     
     var body: some View {
         HStack {
@@ -397,8 +402,22 @@ struct TopBarView: View {
                     .cornerRadius(8)
                     .foregroundColor(.white)
             }
+
+            Button {
+                showReminderSettings = true
+            } label: {
+                Image(systemName: remindersEnabled ? "bell.badge.fill" : "bell.fill")
+                    .foregroundColor(.white)
+                    .padding(8)
+                    .background(Color.white.opacity(0.12))
+                    .clipShape(Circle())
+            }
+            .padding(.leading, 8)
         }
         .padding()
+        .sheet(isPresented: $showReminderSettings) {
+            ReminderSettingsView()
+        }
     }
     
     private var statusText: String {
@@ -545,7 +564,7 @@ struct SideScanningView: View {
                     .background(cva >= PostureConstants.cvaNormal ? Color.green : (cva >= PostureConstants.cvaMildFHP ? Color.cyan : Color.orange))
                     .cornerRadius(20)
                     .foregroundColor(.white)
-                Text("Neck Angle")
+                Text("Side Check")
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.6))
             }
@@ -575,7 +594,7 @@ struct SideProfileGuidanceView: View {
                     .foregroundColor(.white)
                     .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
                 
-                Text("Show your side profile for forward head check")
+                Text("Show your side profile for an optional side-view check")
                     .font(.body)
                     .foregroundColor(.white.opacity(0.9))
                     .multilineTextAlignment(.center)
@@ -605,7 +624,7 @@ struct FrontResultView: View {
     var body: some View {
         VStack(spacing: 20) {
             VStack(spacing: 12) {
-                Text("Front Posture")
+                Text("Front Check-In")
                     .font(.headline)
                     .foregroundColor(.white.opacity(0.7))
                 
@@ -635,7 +654,7 @@ struct FrontResultView: View {
                             .foregroundColor(abs(score.shoulderTilt) < 5 ? .green : .orange)
                     }
                     VStack {
-                        Text("Head Tilt")
+                        Text("Head Position")
                             .font(.caption)
                             .foregroundColor(.gray)
                         Text(String(format: "%.0f°", abs(score.headTilt)))
@@ -652,7 +671,7 @@ struct FrontResultView: View {
                 Button(action: onSideScan) {
                     HStack {
                         Image(systemName: "arrow.turn.up.right")
-                        Text("Check Forward Head")
+                        Text("Check Side View")
                     }
                     .font(.headline)
                     .foregroundColor(.black)
@@ -731,7 +750,7 @@ struct FinalResultView: View {
 
                         Spacer()
                         
-                        Text("Desk Score")
+                        Text("Desk Check-In")
                             .font(.system(.headline, design: .rounded))
                             .foregroundColor(.primary)
                         
@@ -782,11 +801,11 @@ struct FinalResultView: View {
                         
                         // Breakdown
                         VStack(spacing: 16) {
-                            ScoreRow(label: "Shoulder Alignment", isGood: abs(score.frontScore.shoulderTilt) < 5, value: abs(score.frontScore.shoulderTilt) < 5 ? "Level" : "Tilted")
-                            ScoreRow(label: "Head Position", isGood: abs(score.frontScore.headTilt) < 3, value: abs(score.frontScore.headTilt) < 3 ? "Centered" : "Tilted")
-                            
+                            ScoreRow(label: "Shoulder Balance", isGood: abs(score.frontScore.shoulderTilt) < 5, value: abs(score.frontScore.shoulderTilt) < 5 ? "Steady" : "Uneven")
+                            ScoreRow(label: "Head Position", isGood: abs(score.frontScore.headTilt) < 3, value: abs(score.frontScore.headTilt) < 3 ? "Centered" : "Leaning")
+
                             if let cva = score.cva {
-                                ScoreRow(label: "Neck Angle", isGood: cva >= PostureConstants.cvaNormal, value: PostureConstants.cvaStatus(for: cva))
+                                ScoreRow(label: "Side Check", isGood: cva >= PostureConstants.cvaNormal, value: PostureConstants.cvaStatus(for: cva))
                             }
                         }
                         .padding(.bottom, 10)
@@ -805,7 +824,7 @@ struct FinalResultView: View {
                         Button(action: onContinue) {
                             HStack {
                                 Image(systemName: "figure.mind.and.body")
-                                Text("Get Personal Exercises")
+                                Text("Start Quick Reset")
                             }
                             .font(.headline)
                             .foregroundColor(.white)
@@ -818,7 +837,7 @@ struct FinalResultView: View {
                         
                         if !hasSaved {
                             VStack(spacing: 12) {
-                                Toggle("I completed the quick exercises", isOn: $exercisesCompleted)
+                                Toggle("I completed the quick reset", isOn: $exercisesCompleted)
                                     .font(.subheadline)
                                     .padding(.horizontal, 4)
                                 
@@ -861,7 +880,7 @@ struct FinalResultView: View {
                     .animation(.easeOut(duration: 0.6).delay(0.2), value: showContent)
                     
                     // Footer
-                    Text("For wellness purposes only. Not a medical device.")
+                    Text("For wellness use only. Not medical advice.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
@@ -891,9 +910,9 @@ struct FinalResultView: View {
     }
     
     private var scoreStatus: String {
-        if score.combinedScore > 80 { return "Great Posture" }
-        if score.combinedScore > 60 { return "Good Start" }
-        return "Needs Work"
+        if score.combinedScore > 80 { return "Feeling Good" }
+        if score.combinedScore > 60 { return "Solid Start" }
+        return "Reset Suggested"
     }
 }
 
@@ -927,22 +946,22 @@ struct PaywallView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Text("Unlock the 12-Week Clinic")
+            Text("Unlock Premium Reset Packs")
                 .font(.title)
                 .bold()
                 .foregroundColor(.white)
 
             VStack(alignment: .leading, spacing: 10) {
-                FeatureRow(icon: "checkmark.circle.fill", text: "Daily 5-min Correction Plan")
-                FeatureRow(icon: "checkmark.circle.fill", text: "Real-time AI Posture Alerts")
-                FeatureRow(icon: "checkmark.circle.fill", text: "Pain Relief Tracking")
+                FeatureRow(icon: "checkmark.circle.fill", text: "More guided desk reset routines")
+                FeatureRow(icon: "checkmark.circle.fill", text: "Flexible reminder schedules")
+                FeatureRow(icon: "checkmark.circle.fill", text: "Deeper progress history")
             }
             .padding()
 
             Button(action: {
                 // TODO: Integrate RevenueCat Here
             }) {
-                Text("Start 7-Day Free Trial")
+                Text("See Premium Options")
                     .bold()
                     .frame(maxWidth: .infinity)
                     .padding()

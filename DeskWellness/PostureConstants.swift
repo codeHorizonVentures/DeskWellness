@@ -7,23 +7,22 @@
 
 import SwiftUI
 
-/// Shared constants for posture analysis using CVA (Craniovertebral Angle) methodology
-/// Based on 2024-2025 peer-reviewed research with 97%+ reliability
+/// Shared constants for the app's optional posture-awareness check-in.
 enum PostureConstants {
     
-    // MARK: - CVA Thresholds (Clinically Validated)
-    // Reference: Meta-analysis 2024, ICC = 0.904
+    // MARK: - CVA Thresholds
+    // Tuned for wellness-oriented feedback instead of medical assessment.
     
-    /// CVA above which posture is normal (good head position)
+    /// CVA above which the side view looks more upright.
     static let cvaNormal: Double = 53.0
     
-    /// CVA indicating mild forward head posture
+    /// CVA indicating a slight forward lean.
     static let cvaMildFHP: Double = 48.0
     
-    /// CVA indicating moderate forward head posture
+    /// CVA indicating a more noticeable forward lean.
     static let cvaModerateFHP: Double = 45.0
     
-    /// CVA below 45° indicates severe forward head posture
+    /// CVA below 45° suggests a stronger forward lean.
     
     // MARK: - Legacy Thresholds (for backward compatibility)
     
@@ -80,26 +79,25 @@ enum PostureConstants {
     
     // MARK: - Posture Feedback (Wellness Language)
     
-    /// Returns wellness-friendly feedback based on posture angle
+    /// Returns wellness-friendly feedback based on the optional side-view check.
     static func cvaClassification(for cva: Double) -> String {
-        if cva >= cvaNormal { return "Great Alignment" }
+        if cva >= cvaNormal { return "Upright" }
         if cva >= cvaMildFHP { return "Slight Forward Lean" }
         if cva >= cvaModerateFHP { return "Noticeable Forward Lean" }
-        return "Significant Forward Lean"
+        return "Reset Suggested"
     }
     
     /// Returns short wellness status
     static func cvaStatus(for cva: Double) -> String {
-        if cva >= cvaNormal { return "GREAT" }
+        if cva >= cvaNormal { return "UPRIGHT" }
         if cva >= cvaMildFHP { return "GOOD" }
-        if cva >= cvaModerateFHP { return "FAIR" }
-        return "NEEDS WORK"
+        if cva >= cvaModerateFHP { return "RESET" }
+        return "MOVE"
     }
     
     // MARK: - CVA Scoring
     
-    /// Calculates posture score (0-100) based on CVA
-    /// Higher CVA = better posture = higher score
+    /// Calculates a simple check-in score (0-100) based on the side-view estimate.
     static func cvaScore(for cva: Double) -> Int {
         if cva >= cvaNormal { return 100 }
         if cva >= cvaMildFHP { return 85 }
@@ -112,13 +110,13 @@ enum PostureConstants {
     // MARK: - Legacy Functions (backward compatibility)
     
     static func feedbackText(for angle: Double) -> String {
-        if angle > badAngleThreshold { return "HEAD FORWARD" }
-        if angle > perfectAngleThreshold { return "ALMOST THERE" }
-        return "PERFECT ALIGNMENT"
+        if angle > badAngleThreshold { return "LEANING FORWARD" }
+        if angle > perfectAngleThreshold { return "EASING IN" }
+        return "UPRIGHT"
     }
     
     static func statusText(for angle: Double) -> String {
-        angle > badAngleThreshold ? "HEAD FORWARD" : "GOOD ALIGNMENT"
+        angle > badAngleThreshold ? "LEANING FORWARD" : "UPRIGHT"
     }
     
     static func score(for angle: Double) -> Int {
