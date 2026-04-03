@@ -19,3 +19,7 @@ The product direction is:
 - keep processing local and privacy behavior explicit
 
 The current repo is still an early prototype. The intended MVP is a calm desk-discomfort reset coach for desk workers, with camera-based posture check-ins treated as optional and secondary rather than the main daily workflow.
+
+Release gate reference:
+
+- `Documentation/RELEASE_READINESS_CHECKLIST_2026-04-03.md`

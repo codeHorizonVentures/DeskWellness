@@ -56,11 +56,40 @@ class DailyEntry {
         case .workout: return "figure.mind.and.body"
         }
     }
-    
+
     var color: Color {
         switch type {
         case .scan: return .blue
         case .workout: return .orange
         }
+    }
+
+    var journalEntryKind: JournalEntryKind {
+        switch type {
+        case .scan:
+            return .scan
+        case .workout:
+            return .workout
+        }
+    }
+
+    var journalTitle: String {
+        JournalPresentation.title(for: journalEntryKind)
+    }
+
+    var journalStatusText: String {
+        JournalPresentation.statusText(for: journalEntryKind, exercisesCompleted: exercisesCompleted)
+    }
+
+    var hasSavedImages: Bool {
+        photoPath != nil || frontPhotoPath != nil
+    }
+
+    var hasPoseData: Bool {
+        frontPointsData != nil || sidePointsData != nil
+    }
+
+    var hasAnyVisualData: Bool {
+        hasSavedImages || hasPoseData
     }
 }

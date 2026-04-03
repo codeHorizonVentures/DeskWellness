@@ -24,11 +24,10 @@ struct JournalView: View {
                         description: Text("Complete a check-in or reset to start tracking your routine.")
                     )
                 } else {
-                    // Contribution Graph Header
-                    ContributionGraphView(entries: entries)
-                        .listRowInsets(EdgeInsets())
-                        .padding(.vertical, 8)
-                    
+                    JournalSummaryCard(entries: entries)
+                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 8, trailing: 16))
+                        .listRowSeparator(.hidden)
+
                     ForEach(entries) { entry in
                         NavigationLink(destination: EntryDetailView(entry: entry)) {
                             EntryRow(entry: entry)
@@ -39,11 +38,6 @@ struct JournalView: View {
             }
             .navigationTitle("Reset Journal")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink(destination: AddEntryView()) {
-                        Image(systemName: "plus")
-                    }
-                }
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Close") { showJournal = false }
                 }
@@ -76,39 +70,48 @@ struct EntryRow: View {
     let entry: DailyEntry
     
     var body: some View {
-        HStack {
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: entry.iconName)
                 .foregroundColor(entry.color)
-                .font(.title2)
-                .frame(width: 32)
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(entry.type == .scan ? "Check-In" : "Reset Log")
+                .font(.title3)
+                .frame(width: 36, height: 36)
+                .background(entry.color.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(entry.journalTitle)
                     .font(.headline)
-                Text(entry.formattedDate)
-                    .font(.caption)
-                    .foregroundColor(.gray)
+
+                Text(entry.journalStatusText)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                HStack(spacing: 8) {
+                    Text(entry.formattedDate)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    if entry.hasAnyVisualData {
+                        JournalTag(label: "Saved visuals", color: .blue)
+                    }
+                }
+
+                if let note = entry.note, !note.isEmpty {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
             }
-            
-            Spacer()
-            
-            if entry.cvaScore != nil {
-                Text("\(Int(entry.cvaScore!))")
-                    .font(.headline.bold())
-                    .foregroundColor(entry.color)
-            }
-            
-            if entry.exercisesCompleted {
-                Image(systemName: "checkmark.seal.fill")
-                    .foregroundColor(.green)
-            }
-            
-            if entry.photoPath != nil || entry.frontPhotoPath != nil {
-                Image(systemName: "photo.on.rectangle")
-                    .foregroundColor(.gray)
-            }
+
+            Spacer(minLength: 8)
+
+            JournalTag(
+                label: entry.exercisesCompleted ? "Done" : (entry.type == .scan ? "Check-In" : "Logged"),
+                color: entry.exercisesCompleted ? .green : entry.color
+            )
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
     }
 }
 
@@ -118,102 +121,51 @@ struct EntryDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // Header
-                HStack {
-                    Image(systemName: entry.iconName)
-                        .font(.title)
-                        .foregroundColor(entry.color)
-                    Text(entry.type == .scan ? "Check-In" : "Reset Log")
-                        .font(.largeTitle.bold())
-                    Spacer()
-                    Text(entry.formattedDate)
-                        .foregroundColor(.gray)
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: entry.iconName)
+                            .font(.title2)
+                            .foregroundColor(entry.color)
+                            .frame(width: 44, height: 44)
+                            .background(entry.color.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(entry.journalTitle)
+                                .font(.title2.bold())
+                            Text(entry.formattedDate)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+                    }
+
+                    Text(entry.journalStatusText)
+                        .font(.headline)
+                        .foregroundColor(.primary)
                 }
-                
-                Divider()
-                
-                // Photo
-                // Photos
-                // Photos & Schema
-                if entry.photoPath != nil || entry.frontPhotoPath != nil || entry.frontPointsData != nil || entry.sidePointsData != nil {
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text("Visuals")
-                                .font(.headline)
-                            Spacer()
-                            // Delete Photos Action
-                            if entry.photoPath != nil || entry.frontPhotoPath != nil {
-                                Button(role: .destructive) {
-                                    deletePhotos(for: entry)
-                                } label: {
-                                    Label("Clear Photos (Keep Data)", systemImage: "trash")
-                                        .font(.caption)
-                                        .foregroundColor(.red)
-                                }
-                            }
-                        }
-                        
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 15) {
-                                // Front Profile
-                                if let frontPath = entry.frontPhotoPath, let img = loadImage(from: frontPath) {
-                                    VStack {
-                                        Image(uiImage: img)
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(height: 300)
-                                            .cornerRadius(12)
-                                        Text("Front")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                } else if let data = entry.frontPointsData, let points = try? JSONDecoder().decode(FrontPosePoints.self, from: data) {
-                                    // Schema Fallback
-                                    VStack {
-                                        PoseSchemaView(mode: .front, frontPoints: points, sidePoints: nil)
-                                            .frame(width: 200, height: 300)
-                                            .background(Color.black.opacity(0.8))
-                                            .cornerRadius(12)
-                                        Text("Front Schema")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                                
-                                // Side Profile
-                                if let sidePath = entry.photoPath, let img = loadImage(from: sidePath) {
-                                    VStack {
-                                        Image(uiImage: img)
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(height: 300)
-                                            .cornerRadius(12)
-                                        Text("Side")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                } else if let data = entry.sidePointsData, let points = try? JSONDecoder().decode(SidePosePoints.self, from: data) {
-                                    // Schema Fallback
-                                    VStack {
-                                        PoseSchemaView(mode: .side, frontPoints: nil, sidePoints: points)
-                                            .frame(width: 200, height: 300)
-                                            .background(Color.black.opacity(0.8))
-                                            .cornerRadius(12)
-                                        Text("Side Schema")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                            }
-                        }
+
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Session")
+                        .font(.headline)
+
+                    Toggle("Reset Completed", isOn: $entry.exercisesCompleted)
+
+                    if entry.hasSavedImages {
+                        Label("Saved photos stay on device only.", systemImage: "photo.on.rectangle")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    } else if entry.hasPoseData {
+                        Label("Check-in data was saved locally without photos.", systemImage: "waveform.path.ecg")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
                     }
                 }
-                
-                // Exercise Status
-                Toggle("Reset Completed", isOn: $entry.exercisesCompleted)
-                    .padding(.vertical)
-                
-                // Stats
+                .padding()
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(16)
+
                 if let score = entry.cvaScore {
                     HStack {
                         VStack(alignment: .leading) {
@@ -231,8 +183,55 @@ struct EntryDetailView: View {
                     .background(Color(UIColor.secondarySystemBackground))
                     .cornerRadius(12)
                 }
-                
-                // Note
+
+                if entry.hasSavedImages {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Saved Visuals")
+                                .font(.headline)
+
+                            Spacer()
+
+                            Button(role: .destructive) {
+                                deletePhotos(for: entry)
+                            } label: {
+                                Label("Clear Photos", systemImage: "trash")
+                                    .font(.caption)
+                            }
+                        }
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 15) {
+                                if let frontPath = entry.frontPhotoPath, let img = loadImage(from: frontPath) {
+                                    VStack {
+                                        Image(uiImage: img)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(height: 220)
+                                            .cornerRadius(12)
+                                        Text("Front")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+
+                                if let sidePath = entry.photoPath, let img = loadImage(from: sidePath) {
+                                    VStack {
+                                        Image(uiImage: img)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(height: 220)
+                                            .cornerRadius(12)
+                                        Text("Side")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if let note = entry.note, !note.isEmpty {
                     VStack(alignment: .leading) {
                         Text("Notes")
@@ -268,6 +267,92 @@ struct EntryDetailView: View {
             try? fileManager.removeItem(at: documents.appendingPathComponent(path))
             entry.frontPhotoPath = nil
         }
+    }
+}
+
+struct JournalSummaryCard: View {
+    let entries: [DailyEntry]
+
+    private var totalResets: Int {
+        entries.filter { $0.type == .workout }.count
+    }
+
+    private var completedResets: Int {
+        entries.filter { $0.type == .workout && $0.exercisesCompleted }.count
+    }
+
+    private var checkIns: Int {
+        entries.filter { $0.type == .scan }.count
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("History")
+                .font(.headline)
+
+            Text("Keep this simple: completed resets first, optional check-ins second.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 12) {
+                SummaryMetricCard(
+                    label: "Completed",
+                    value: "\(completedResets)",
+                    tint: .green
+                )
+                SummaryMetricCard(
+                    label: "Logged Resets",
+                    value: "\(totalResets)",
+                    tint: .orange
+                )
+                SummaryMetricCard(
+                    label: "Check-Ins",
+                    value: "\(checkIns)",
+                    tint: .blue
+                )
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(Color(UIColor.secondarySystemBackground))
+        )
+    }
+}
+
+struct SummaryMetricCard: View {
+    let label: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value)
+                .font(.title3.bold())
+                .foregroundColor(.primary)
+            Text(label)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(tint.opacity(0.12))
+        .cornerRadius(12)
+    }
+}
+
+struct JournalTag: View {
+    let label: String
+    let color: Color
+
+    var body: some View {
+        Text(label)
+            .font(.caption.weight(.medium))
+            .foregroundColor(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
     }
 }
 
@@ -352,58 +437,5 @@ struct PoseSchemaView: View {
                 }
             }
         }
-    }
-}
-// MARK: - Contribution Graph
-
-struct ContributionGraphView: View {
-    let entries: [DailyEntry]
-    
-    // Config
-    private let daysToDisplay = 91 // ~3 months
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 13) // ~13 weeks
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Consistency")
-                .font(.headline)
-                .padding(.horizontal)
-            
-            // Heatmap Grid
-            LazyVGrid(columns: columns, spacing: 4) {
-                ForEach(0..<daysToDisplay, id: \.self) { offset in
-                    // Calculate date (reverse chronological order for display? No, typically left-right, top-down)
-                    // But GitHub is columns = weeks. 
-                    // Simpler: Just a grid of the last N days.
-                    
-                    let date = Calendar.current.date(byAdding: .day, value: -((daysToDisplay - 1) - offset), to: Date())!
-                    let hasEntry = hasEntry(on: date)
-                    let isToday = Calendar.current.isDateInToday(date)
-                    
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(hasEntry ? Color.green : Color.gray.opacity(0.2))
-                        .frame(height: 20)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 2)
-                                .stroke(Color.primary.opacity(0.5), lineWidth: isToday ? 1 : 0)
-                        )
-                }
-            }
-            .padding(.horizontal)
-            
-            // Footer Legend
-            HStack {
-                Text("Last 3 Months")
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                Spacer()
-            }
-            .padding(.horizontal)
-        }
-        .padding(.vertical)
-    }
-    
-    private func hasEntry(on date: Date) -> Bool {
-        return entries.contains { Calendar.current.isDate($0.date, inSameDayAs: date) }
     }
 }
