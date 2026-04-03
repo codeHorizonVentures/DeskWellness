@@ -25,32 +25,32 @@ struct PostureTip: Identifiable {
 // MARK: - Data
 
 struct PostureTipsData {
-    static let dailyFix = [
+    static let deskReset = [
         PostureTip(
-            title: "Chin Tucks",
-            description: "Gently tuck your chin straight back like you're making a double chin. Feel the stretch at the base of your skull. Hold for 2 seconds, release.",
+            title: "Neck Reset",
+            description: "Sit or stand tall. Gently glide your chin straight back like you're making a double chin. Pause for 2 seconds, then release and repeat.",
             iconName: "figure.mind.and.body",
             videoName: "chin-tucks-exercise-animation",
             duration: 60,
-            benefit: "Helps ease neck tension during long desk sessions.",
+            benefit: "Helps ease neck stiffness after long screen focus.",
             color: .blue
         ),
         PostureTip(
-            title: "Wall Angels",
-            description: "Stand with back against a wall. Arms in 'W' shape. Slide arms up to 'Y' while keeping elbows and wrists touching the wall.",
+            title: "Shoulder Opener",
+            description: "Stand with your back against a wall. Start with your arms in a W shape, then slide toward a Y while keeping contact where comfortable.",
             iconName: "figure.arms.open",
             videoName: "wall-angels-animation",
             duration: 60,
-            benefit: "Helps open the chest and upper back after screen time.",
+            benefit: "Helps unload tight shoulders and upper back after sitting.",
             color: .orange
         ),
         PostureTip(
-            title: "Doorway Stretch",
-            description: "Place forearms on a door frame at 90 degrees. Step through gently until you feel a stretch in your chest. Hold.",
+            title: "Chest + Back Release",
+            description: "Place your forearms on a door frame at 90 degrees. Step through gently until you feel a stretch across the front of your chest and upper back line.",
             iconName: "figure.walk",
             videoName: "doorway-streach-animation",
             duration: 45,
-            benefit: "Helps loosen the chest and shoulders after sitting.",
+            benefit: "Helps ease desk hunch tension through the chest and back.",
             color: .green
         )
     ]
@@ -65,7 +65,7 @@ struct PostureTipView: View {
     @State private var timerActive = false
     @State private var showCompletion = false
     
-    let tips = PostureTipsData.dailyFix
+    let tips = PostureTipsData.deskReset
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
     var body: some View {
@@ -75,9 +75,14 @@ struct PostureTipView: View {
             VStack(spacing: 20) {
                 // Header
                 HStack {
-                    Text("The 3-Minute Reset")
-                        .font(.title2.bold())
-                        .foregroundColor(.white)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("3-Minute Desk Reset")
+                            .font(.title2.bold())
+                            .foregroundColor(.white)
+                        Text("Neck, shoulders, and back")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
                     Spacer()
                     Button(action: { presentationMode.wrappedValue.dismiss() }) {
                         Image(systemName: "xmark.circle.fill")
@@ -263,7 +268,7 @@ struct CompletionView: View {
                     .font(.largeTitle.bold())
                     .foregroundColor(.white)
                 
-                Text("You've finished a quick reset for today's desk session.")
+                Text("You've finished a quick desk reset for this work block.")
                     .font(.body)
                     .foregroundColor(.gray)
                     .multilineTextAlignment(.center)
