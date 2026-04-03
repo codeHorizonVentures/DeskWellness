@@ -1,5 +1,15 @@
 # DeskWellness
-DeskWellness is an iPhone-first general-wellness app for desk workers.
+DeskWellness is the current internal project name.
+
+The current public-brand direction is:
+
+`ResetMinute`
+
+Recommended App Store subtitle:
+
+`Desk Breaks for Neck & Back`
+
+ResetMinute is an iPhone-first general-wellness app for desk workers.
 
 The product direction is:
 

@@ -13,6 +13,11 @@ It would help because DeskWellness is no longer just "another app idea." It now 
 - a distinct release path
 - different risks from FamilyFund
 
+Brand note:
+
+- use `DeskWellness` as the internal Jira/repo program name for now
+- use `ResetMinute` as the public product name direction in product and marketing tickets
+
 Without a separate project, strategy, research, copy, privacy work, and engineering work will blur together and lose priority.
 
 ## Why a separate project helps
@@ -146,6 +151,8 @@ Do not add feature ideas to the MVP board unless they clearly improve one of the
 ## Bottom line
 
 A separate Jira project is useful here because DeskWellness now has enough product definition to benefit from disciplined backlog control.
+
+The internal Jira project can remain `DeskWellness` even if the public product name becomes `ResetMinute`.
 
 If you want, the next step is:
 
