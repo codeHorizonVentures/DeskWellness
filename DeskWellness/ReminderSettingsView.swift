@@ -7,9 +7,12 @@
 
 import SwiftUI
 import UserNotifications
+import UIKit
 
 struct ReminderSettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
 
     @AppStorage(ReminderScheduler.enabledKey) private var remindersEnabled = false
     @AppStorage(ReminderScheduler.startHourKey) private var startHour = 10
@@ -26,11 +29,25 @@ struct ReminderSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Workday Reminders") {
+                Section("Reminder Access") {
+                    ReminderAccessCard(
+                        guidance: guidance,
+                        onPrimaryAction: {
+                            Task { await handlePrimaryAction(guidance.primaryAction) }
+                        },
+                        onSecondaryAction: {
+                            remindersEnabled = false
+                            statusMessage = "Weekday reminders stay off until notification access is enabled."
+                        }
+                    )
+                }
+
+                Section {
                     Toggle("Enable weekday reminders", isOn: $remindersEnabled)
                         .onChange(of: remindersEnabled) { _, _ in
                             Task { await syncReminders() }
                         }
+                        .disabled(reminderControlsDisabled)
 
                     if remindersEnabled {
                         DatePicker(
@@ -66,6 +83,12 @@ struct ReminderSettingsView: View {
                             Task { await syncReminders() }
                         }
                     }
+                } header: {
+                    Text("Workday Reminders")
+                } footer: {
+                    if reminderControlsDisabled {
+                        Text("Notification access is off in Settings. Use the card above to re-enable reminders.")
+                    }
                 }
 
                 Section("What you get") {
@@ -87,6 +110,10 @@ struct ReminderSettingsView: View {
             .task {
                 authorizationStatus = await ReminderScheduler.currentAuthorizationStatus()
                 await syncReminders(showSuccessMessage: false)
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                Task { await syncReminders(showSuccessMessage: false) }
             }
         }
     }
@@ -118,25 +145,80 @@ struct ReminderSettingsView: View {
         return Calendar.current.date(from: components) ?? Date()
     }
 
+    private var guidance: ReminderAccessGuidance {
+        ReminderAccessGuidance.make(status: authorizationStatus, remindersEnabled: remindersEnabled)
+    }
+
+    private var reminderControlsDisabled: Bool {
+        authorizationStatus == .denied
+    }
+
     @MainActor
     private func syncReminders(showSuccessMessage: Bool = true) async {
         do {
             let scheduled = try await ReminderScheduler.syncFromDefaults()
             authorizationStatus = await ReminderScheduler.currentAuthorizationStatus()
 
-            if !remindersEnabled {
-                statusMessage = "Weekday reminders are off."
-            } else if !scheduled && authorizationStatus == .denied {
-                statusMessage = "Notifications are blocked. Enable them in Settings to get desk reset reminders."
-            } else if scheduled {
+            if authorizationStatus == .denied {
+                remindersEnabled = false
+            }
+
+            if scheduled && remindersEnabled {
                 statusMessage = showSuccessMessage
                     ? "Weekday reminders are scheduled."
-                    : "Weekday reminders are ready."
+                    : guidance.statusMessage
             } else {
-                statusMessage = "Waiting for notification permission."
+                statusMessage = guidance.statusMessage
             }
         } catch {
             statusMessage = "Could not update reminders right now."
         }
+    }
+
+    @MainActor
+    private func handlePrimaryAction(_ action: ReminderGuidancePrimaryAction?) async {
+        switch action {
+        case .requestPermission, .enableReminders:
+            remindersEnabled = true
+            await syncReminders()
+
+        case .openSettings:
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+                openURL(url)
+            }
+
+        case nil:
+            break
+        }
+    }
+}
+
+private struct ReminderAccessCard: View {
+    let guidance: ReminderAccessGuidance
+    let onPrimaryAction: () -> Void
+    let onSecondaryAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(guidance.title)
+                .font(.headline)
+
+            Text(guidance.message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            if let primaryActionTitle = guidance.primaryActionTitle {
+                Button(primaryActionTitle, action: onPrimaryAction)
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("reminder_guidance_primary_action")
+            }
+
+            if guidance.showsSecondaryDismissAction {
+                Button("Keep reminders off", role: .cancel, action: onSecondaryAction)
+                    .accessibilityIdentifier("reminder_guidance_secondary_action")
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityIdentifier("reminder_guidance_card")
     }
 }
