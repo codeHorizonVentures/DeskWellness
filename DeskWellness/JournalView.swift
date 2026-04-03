@@ -273,44 +273,50 @@ struct EntryDetailView: View {
 struct JournalSummaryCard: View {
     let entries: [DailyEntry]
 
+    private var consistencySummary: ResetConsistencySummary {
+        ResetConsistencySummary.build(from: entries.map(\.resetConsistencyEntry))
+    }
+
     private var totalResets: Int {
         entries.filter { $0.type == .workout }.count
     }
 
-    private var completedResets: Int {
-        entries.filter { $0.type == .workout && $0.exercisesCompleted }.count
-    }
-
-    private var checkIns: Int {
-        entries.filter { $0.type == .scan }.count
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("History")
+            Text("This Week")
                 .font(.headline)
 
-            Text("Keep this simple: completed resets first, optional check-ins second.")
+            Text(consistencySummary.headline)
+                .font(.title3.bold())
+
+            Text(consistencySummary.supportingText)
                 .font(.subheadline)
                 .foregroundColor(.secondary)
+
+            ProgressView(value: consistencySummary.progressFraction)
+                .tint(.green)
 
             HStack(spacing: 12) {
                 SummaryMetricCard(
                     label: "Completed",
-                    value: "\(completedResets)",
+                    value: "\(consistencySummary.completedResets)",
                     tint: .green
                 )
                 SummaryMetricCard(
-                    label: "Logged Resets",
-                    value: "\(totalResets)",
+                    label: "Active Days",
+                    value: "\(consistencySummary.activeDays)",
                     tint: .orange
                 )
                 SummaryMetricCard(
                     label: "Check-Ins",
-                    value: "\(checkIns)",
+                    value: "\(consistencySummary.checkIns)",
                     tint: .blue
                 )
             }
+
+            Text("All-time reset logs: \(totalResets)")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
         .padding(16)
         .background(

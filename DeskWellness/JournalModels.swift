@@ -92,4 +92,12 @@ class DailyEntry {
     var hasAnyVisualData: Bool {
         hasSavedImages || hasPoseData
     }
+
+    var resetConsistencyEntry: ResetConsistencyEntry {
+        ResetConsistencyEntry(
+            date: date,
+            kind: journalEntryKind,
+            exercisesCompleted: exercisesCompleted
+        )
+    }
 }

@@ -9,6 +9,7 @@ import SwiftUI
 import AVFoundation
 import AudioToolbox
 import StoreKit
+import SwiftData
 
 // MARK: - App State Machine
 
@@ -46,7 +47,9 @@ struct FinalScore {
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @Query(sort: \DailyEntry.date, order: .reverse) private var entries: [DailyEntry]
     @StateObject private var engine = PostureEngine()
+    @AppStorage("hasSeenResetMinuteOnboarding") private var hasSeenOnboarding = false
     @State private var appState: AppState = .home
     @State private var scanDuration: Double = 0.0
     @State private var feedbackGenerator = UINotificationFeedbackGenerator()
@@ -57,6 +60,8 @@ struct ContentView: View {
     @State private var showPostureTips = false
     @State private var frontSnapshot: UIImage?
     @State private var sideSnapshot: UIImage?
+    @State private var showOnboarding = false
+    @State private var decidedOnboardingForThisLaunch = false
 
     let scanTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     let synthesizer = AVSpeechSynthesizer()
@@ -122,6 +127,7 @@ struct ContentView: View {
                 switch appState {
                 case .home:
                     HomeView(
+                        consistencySummary: consistencySummary,
                         onStartQuickReset: { showPostureTips = true },
                         onStartCheckIn: { beginCheckInFlow() },
                         onOpenJournal: { showJournal = true }
@@ -234,8 +240,33 @@ struct ContentView: View {
         .sheet(isPresented: $showJournal) {
             JournalView(showJournal: $showJournal)
         }
+        .fullScreenCover(isPresented: $showOnboarding) {
+            ResetMinuteOnboardingView {
+                hasSeenOnboarding = true
+                showOnboarding = false
+            }
+        }
         .task {
             try? await ReminderScheduler.syncFromDefaults()
+            decideOnboardingPresentationIfNeeded()
+        }
+    }
+
+    private var consistencySummary: ResetConsistencySummary {
+        ResetConsistencySummary.build(from: entries.map(\.resetConsistencyEntry))
+    }
+
+    private func decideOnboardingPresentationIfNeeded() {
+        guard !decidedOnboardingForThisLaunch else { return }
+        decidedOnboardingForThisLaunch = true
+
+        let launchArguments = ProcessInfo.processInfo.arguments
+        if launchArguments.contains("-ResetMinuteSkipOnboarding") {
+            return
+        }
+
+        if launchArguments.contains("-ResetMinuteForceOnboarding") || !hasSeenOnboarding {
+            showOnboarding = true
         }
     }
 
@@ -464,6 +495,7 @@ struct TopBarView: View {
 }
 
 struct HomeView: View {
+    let consistencySummary: ResetConsistencySummary
     let onStartQuickReset: () -> Void
     let onStartCheckIn: () -> Void
     let onOpenJournal: () -> Void
@@ -488,6 +520,9 @@ struct HomeView: View {
                     .foregroundColor(.white.opacity(0.7))
             }
             .padding(.horizontal, 32)
+
+            HomeWeeklyProgressCard(summary: consistencySummary)
+                .padding(.horizontal, 28)
 
             VStack(spacing: 14) {
                 Button(action: onStartQuickReset) {
@@ -529,6 +564,75 @@ struct HomeView: View {
             Spacer()
         }
         .padding(.bottom, 40)
+    }
+}
+
+struct HomeWeeklyProgressCard: View {
+    let summary: ResetConsistencySummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("This Week")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.white.opacity(0.66))
+                        .textCase(.uppercase)
+
+                    Text(summary.headline)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                }
+
+                Spacer()
+
+                Text("\(summary.completedResets)/\(summary.weeklyGoal)")
+                    .font(.title3.bold())
+                    .foregroundColor(.cyan)
+            }
+
+            Text(summary.supportingText)
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.72))
+
+            ProgressView(value: summary.progressFraction)
+                .tint(.cyan)
+
+            HStack(spacing: 10) {
+                HomeWeeklyMetric(label: "Active Days", value: "\(summary.activeDays)")
+                HomeWeeklyMetric(label: "Check-Ins", value: "\(summary.checkIns)")
+            }
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("home_weekly_progress")
+        .accessibilityLabel("This week progress. \(summary.headline). \(summary.supportingText)")
+    }
+}
+
+private struct HomeWeeklyMetric: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(.headline)
+                .foregroundColor(.white)
+            Text(label)
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.62))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.black.opacity(0.16))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
