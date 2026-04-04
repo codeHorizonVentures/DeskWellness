@@ -1,0 +1,3 @@
+ResetMinute is a general-wellness iPhone app for desk workers. The main flow is short desk reset routines plus optional local reminders. Camera-based posture check-ins are optional, secondary, and processed on device. The app is not intended to diagnose, treat, or prevent any medical condition.
+
+Check-in photos and pose-related artifacts are stored locally on device only when the user chooses to save a journal entry.
