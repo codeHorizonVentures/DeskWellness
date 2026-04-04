@@ -19,12 +19,31 @@ Use these values from the current project:
 - app name: `ResetMinute`
 - bundle ID: `chv.desk.wellness`
 - display name: `ResetMinute`
-- marketing version: `0.1`
+- marketing version: `1.0`
 - build number: `1` until a new archive increments it
+
+## Existing App Store Connect record
+
+The app record already exists in App Store Connect under the current Apple-team API key:
+
+- App Store Connect app ID: `6745263811`
+- current ASC app name: `DeskWellness`
+- bundle ID: `chv.desk.wellness`
+- SKU: `DeskWellness`
+- primary locale: `en-US`
+
+This means the operator does **not** need to create a brand-new app record first.
+
+The operator **does** still need to align the customer-facing listing state with the current product:
+
+- use `ResetMinute` as the listing title
+- confirm the app name shown to users is `ResetMinute`
+- keep the existing internal SKU `DeskWellness`
+- do not plan around changing the SKU during release prep
 
 ## App record setup
 
-Create or verify the App Store Connect app record with:
+Update or verify the existing App Store Connect app record with:
 
 - platform: `iOS`
 - primary category: `Health & Fitness`
@@ -46,10 +65,13 @@ Fill the first English metadata entry from:
 
 - `marketing/app_store/metadata/en-US/name.txt`
 - `marketing/app_store/metadata/en-US/subtitle.txt`
-- `marketing/app_store/metadata/en-US/promotional_text.txt`
 - `marketing/app_store/metadata/en-US/description.txt`
 - `marketing/app_store/metadata/en-US/keywords.txt`
 - `marketing/app_store/metadata/en-US/review_notes.txt`
+
+Operator matrix:
+
+- `Documentation/APP_STORE_OPERATOR_MATRIX_2026-04-04.md`
 
 ## Screenshot handoff
 
@@ -82,6 +104,10 @@ Before saving App Store Connect privacy answers, keep them aligned to the actual
 - there is no ResetMinute-operated backend for journal data or reminders in the current MVP
 - there is no silent sync or upload in the current MVP
 
+Use the exact first-pass operator answers from:
+
+- `Documentation/APP_STORE_OPERATOR_MATRIX_2026-04-04.md`
+
 ## Review notes
 
 Use the review note baseline from:
@@ -108,7 +134,7 @@ These are still blockers even after the ASC record exists:
 2. signed archive / upload flow
    - build an App Store archive for `chv.desk.wellness`
    - upload the build
-   - attach the build to version `0.1`
+   - attach the build to version `1.0`
 
 3. final screenshot approval
    - `raw/` is exported
@@ -117,9 +143,8 @@ These are still blockers even after the ASC record exists:
 ## Recommended operator sequence
 
 1. approve the five raw screenshots
-2. create the App Store Connect app record
-3. enter the English metadata
-4. upload the approved screenshot set
-5. run the real-device release checklist
-6. archive and upload build `0.1`
-7. attach the build and complete submission metadata
+2. sync the existing app record metadata with `python3 scripts/app_store_release_system.py sync-metadata`
+3. upload the approved screenshot set with `python3 scripts/app_store_release_system.py sync-iphone-screenshots`
+4. run the real-device release checklist
+5. archive and upload the signed build that matches the selected App Store version
+6. attach the build and complete submission metadata

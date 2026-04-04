@@ -49,3 +49,29 @@ Do not treat the package as submission-ready unless all of these are aligned:
 - metadata in `metadata/en-US/`
 - live support/privacy URLs
 - app copy stays inside the no-certification general-wellness boundary
+
+## Release commands
+
+Approve the current raw screenshot set:
+
+```bash
+python3 scripts/app_store_release_system.py approve-screenshots
+```
+
+Sync the live listing metadata:
+
+```bash
+python3 scripts/app_store_release_system.py sync-metadata
+```
+
+Upload the approved iPhone screenshots:
+
+```bash
+python3 scripts/app_store_release_system.py sync-iphone-screenshots
+```
+
+Verify the current App Store release state:
+
+```bash
+python3 scripts/app_store_release_system.py verify --report-path /tmp/resetminute_release_report.json
+```

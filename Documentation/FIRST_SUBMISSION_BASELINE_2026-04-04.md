@@ -60,31 +60,33 @@ Export helper:
 
 - screenshot export works from xcresult into the repo
 - exported screenshots are `1320x2868`
+- the five approved screenshots are now populated in `marketing/app_store/screenshots/iphone-6.9/en-US/final/`
 - URLs are live and publicly reachable
 - app copy, support copy, and privacy copy are aligned to the no-certification desk-wellness boundary
+- App Store Connect already contains an app record for bundle ID `chv.desk.wellness` with app ID `6745263811`
+- the live App Store Connect listing is now aligned to `ResetMinute` metadata and the five approved iPhone screenshots
 
 ## Still blocking actual submission
 
-1. Final screenshot approval has not happened yet.
-   - `raw/` exists
-   - `final/` is not approved/populated yet
+1. App Store Connect still needs manual operator completion outside the synced listing fields.
+   - existing app record: `6745263811`
+   - category/privacy answers/review notes still need live ASC entry work
+   - operator defaults now live in `Documentation/APP_STORE_OPERATOR_MATRIX_2026-04-04.md`
 
-2. App Store Connect baseline has not been created or verified here.
-   - app record/category/privacy answers/review notes still need live ASC entry work
-
-3. Real-device release gate still needs to be completed and recorded.
+2. Real-device release gate still needs to be completed and recorded.
    - reminder allow/deny/re-enable path
    - quick reset completion path
    - optional check-in path
    - journal delete behavior
 
-4. There is still no ResetMinute-specific upload/release automation.
+3. There is still no ResetMinute-specific upload/release automation.
    - current state is a lightweight repo baseline, not a full release system
 
 ## Recommended next actions
 
-1. Review the five raw screenshots and choose the approved upload set.
-2. Copy approved images into `marketing/app_store/screenshots/iphone-6.9/en-US/final/`.
-3. Create the first App Store Connect app/version entry using the files in `marketing/app_store/metadata/en-US/`.
+1. Keep the approved screenshot set in `marketing/app_store/screenshots/iphone-6.9/en-US/final/` as the upload baseline.
+2. Keep the existing App Store Connect record aligned with `python3 scripts/app_store_release_system.py sync-metadata`.
+3. Keep the App Store screenshot set aligned with `python3 scripts/app_store_release_system.py sync-iphone-screenshots`.
 4. Run and record the real-device release checklist from `Documentation/RELEASE_READINESS_CHECKLIST_2026-04-03.md`.
-5. Only after those are green, build a small deterministic submission workflow for ResetMinute.
+5. Complete the manual App Store operator fields from `Documentation/APP_STORE_OPERATOR_MATRIX_2026-04-04.md`.
+6. Archive and upload the signed build for the selected App Store version if the attached build is not the intended release candidate.
