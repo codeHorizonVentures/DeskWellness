@@ -54,6 +54,16 @@ Reason:
 - primary value is a wellness reset habit
 - secondary value is workday interruption and routine support
 
+## URL mapping for first submission
+
+- `Marketing URL`: `https://familyfund.app/resetminute/`
+- `Support URL`: `https://familyfund.app/resetminute/support/`
+- `Privacy Policy URL`: `https://familyfund.app/resetminute/privacy/`
+
+Optional:
+
+- `Terms URL`: `https://familyfund.app/resetminute/terms/`
+
 ## Promotional text
 
 `Take a quick desk reset for your neck, shoulders, and back during long workdays. Build a healthier desk routine with optional reminders and gentle weekly progress tracking.`

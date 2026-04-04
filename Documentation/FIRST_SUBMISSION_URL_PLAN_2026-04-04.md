@@ -24,25 +24,27 @@ The goal is simple:
 
 ## Canonical structure
 
-The first release should use this structure on the chosen canonical domain:
+The first release will use `familyfund.app` as the MVP host domain, with ResetMinute living under dedicated product subpaths:
 
-- root landing page: `https://<canonical-domain>/`
-- support page: `https://<canonical-domain>/support`
-- privacy policy: `https://<canonical-domain>/privacy`
+- root landing page: `https://familyfund.app/resetminute/`
+- support page: `https://familyfund.app/resetminute/support/`
+- privacy policy: `https://familyfund.app/resetminute/privacy/`
 
 Optional:
 
-- terms page: `https://<canonical-domain>/terms`
+- terms page: `https://familyfund.app/resetminute/terms/`
 
 ## App Store Connect mapping
 
 For the first submission:
 
-- `Support URL` -> `/support`
-- `Privacy Policy URL` -> `/privacy`
-- `Marketing URL` -> root landing page only if it is live and product-accurate
+- `Support URL` -> `https://familyfund.app/resetminute/support/`
+- `Privacy Policy URL` -> `https://familyfund.app/resetminute/privacy/`
+- `Marketing URL` -> `https://familyfund.app/resetminute/`
 
 If the landing page is not ready, keep marketing URL blank rather than pointing users to an unfinished page.
+
+The current decision is that the landing page is ready enough to serve as the MVP marketing URL because it is live, product-accurate, and separated from FamilyFund by subpath.
 
 ## Required support page content
 
@@ -132,4 +134,11 @@ Do not treat the URL plan as complete until all of these are true:
 
 ## Recommended next step
 
-Use this plan as the source of truth for `DW-21`, then create the actual public pages before the first App Store Connect submission is prepared.
+The initial public page set now exists at:
+
+- `https://familyfund.app/resetminute/`
+- `https://familyfund.app/resetminute/support/`
+- `https://familyfund.app/resetminute/privacy/`
+- `https://familyfund.app/resetminute/terms/`
+
+Use this plan as the source of truth for `DW-21` and the first App Store Connect version entry.
