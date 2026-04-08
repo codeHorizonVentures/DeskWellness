@@ -1,4 +1,6 @@
 import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 
 enum IconVariant: CaseIterable {
     case standard
@@ -90,33 +92,20 @@ private func point(onCircleWithRadius radius: CGFloat, angleDegrees: CGFloat) ->
 private func drawBackground(for variant: IconVariant, palette: Palette) {
     guard variant == .standard else { return }
 
-    let backgroundPath = roundedRectPath(iconRect)
-    backgroundPath.addClip()
-
     let gradient = NSGradient(colors: [palette.backgroundTop, palette.backgroundBottom])!
-    gradient.draw(in: backgroundPath, angle: -55)
+    gradient.draw(in: NSBezierPath(rect: iconRect), angle: -55)
 
-    let glowRect = CGRect(x: 104, y: 560, width: 560, height: 340)
+    let glowRect = CGRect(x: center.x - 260, y: center.y - 210, width: 520, height: 520)
     let glow = NSBezierPath(ovalIn: glowRect)
     palette.ambientGlow.setFill()
     glow.fill()
-
-    let lowerBloomRect = CGRect(x: 430, y: 84, width: 360, height: 280)
-    let lowerBloom = NSBezierPath(ovalIn: lowerBloomRect)
-    NSColor(calibratedRed: 0.18, green: 0.45, blue: 1.0, alpha: 0.18).setFill()
-    lowerBloom.fill()
-
-    let sheenRect = CGRect(x: 180, y: 688, width: 580, height: 112)
-    let sheen = NSBezierPath(ovalIn: sheenRect)
-    NSColor(calibratedWhite: 1.0, alpha: 0.06).setFill()
-    sheen.fill()
 }
 
 private func applyShadow(_ palette: Palette) {
     let shadow = NSShadow()
     shadow.shadowColor = palette.shadow
-    shadow.shadowBlurRadius = 34
-    shadow.shadowOffset = NSSize(width: 0, height: -12)
+    shadow.shadowBlurRadius = 24
+    shadow.shadowOffset = NSSize(width: 0, height: -8)
     shadow.set()
 }
 
@@ -148,21 +137,15 @@ private func drawResetRing(variant: IconVariant, palette: Palette) {
         accentPath.stroke()
     }
 
-    if variant == .standard {
-        let halo = NSBezierPath(ovalIn: CGRect(x: center.x - 182, y: center.y - 182, width: 364, height: 364))
-        NSColor(calibratedWhite: 1.0, alpha: 0.045).setFill()
-        halo.fill()
-    }
-
     let tip = point(onCircleWithRadius: ringRadius, angleDegrees: 26)
     let tangentAngle = CGFloat(26 + 90).radians
     let tangent = CGPoint(x: cos(tangentAngle), y: sin(tangentAngle))
     let normalAngle = CGFloat(26).radians
     let normal = CGPoint(x: cos(normalAngle), y: sin(normalAngle))
-    let baseCenter = CGPoint(x: tip.x - tangent.x * 22, y: tip.y - tangent.y * 22)
-    let arrowTip = CGPoint(x: tip.x + tangent.x * 72, y: tip.y + tangent.y * 72)
-    let left = CGPoint(x: baseCenter.x + normal.x * 74, y: baseCenter.y + normal.y * 74)
-    let right = CGPoint(x: baseCenter.x - normal.x * 74, y: baseCenter.y - normal.y * 74)
+    let baseCenter = CGPoint(x: tip.x - tangent.x * 16, y: tip.y - tangent.y * 16)
+    let arrowTip = CGPoint(x: tip.x + tangent.x * 58, y: tip.y + tangent.y * 58)
+    let left = CGPoint(x: baseCenter.x + normal.x * 60, y: baseCenter.y + normal.y * 60)
+    let right = CGPoint(x: baseCenter.x - normal.x * 60, y: baseCenter.y - normal.y * 60)
 
     let arrow = NSBezierPath()
     arrow.move(to: arrowTip)
@@ -174,12 +157,6 @@ private func drawResetRing(variant: IconVariant, palette: Palette) {
 }
 
 private func drawMinuteHand(variant: IconVariant, palette: Palette) {
-    if variant == .standard {
-        let innerGlow = NSBezierPath(ovalIn: CGRect(x: center.x - 150, y: center.y - 150, width: 300, height: 300))
-        NSColor(calibratedWhite: 1.0, alpha: 0.08).setFill()
-        innerGlow.fill()
-    }
-
     if variant == .standard {
         applyShadow(palette)
     }
@@ -200,7 +177,67 @@ private func drawMinuteHand(variant: IconVariant, palette: Palette) {
     highlight.fill()
 }
 
+private func writeCGImage(_ image: CGImage, to outputURL: URL) throws {
+    guard let destination = CGImageDestinationCreateWithURL(
+        outputURL as CFURL,
+        UTType.png.identifier as CFString,
+        1,
+        nil
+    ) else {
+        throw NSError(domain: "IconGen", code: 4, userInfo: [NSLocalizedDescriptionKey: "Unable to create image destination"])
+    }
+
+    CGImageDestinationAddImage(destination, image, nil)
+    guard CGImageDestinationFinalize(destination) else {
+        throw NSError(domain: "IconGen", code: 5, userInfo: [NSLocalizedDescriptionKey: "Unable to finalize image destination"])
+    }
+}
+
 private func renderIcon(variant: IconVariant, to outputURL: URL) throws {
+    if variant == .standard {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue)
+        guard let cgContext = CGContext(
+            data: nil,
+            width: Int(canvasSize.width),
+            height: Int(canvasSize.height),
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo.rawValue
+        ) else {
+            throw NSError(domain: "IconGen", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unable to create RGB graphics context"])
+        }
+
+        let context = NSGraphicsContext(cgContext: cgContext, flipped: false)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+
+        cgContext.setAllowsAntialiasing(true)
+        cgContext.setShouldAntialias(true)
+        cgContext.interpolationQuality = .high
+
+        let palette = palette(for: variant)
+        drawBackground(for: variant, palette: palette)
+
+        NSGraphicsContext.saveGraphicsState()
+        drawResetRing(variant: variant, palette: palette)
+        NSGraphicsContext.restoreGraphicsState()
+
+        NSGraphicsContext.saveGraphicsState()
+        drawMinuteHand(variant: variant, palette: palette)
+        NSGraphicsContext.restoreGraphicsState()
+
+        NSGraphicsContext.restoreGraphicsState()
+
+        guard let image = cgContext.makeImage() else {
+            throw NSError(domain: "IconGen", code: 3, userInfo: [NSLocalizedDescriptionKey: "Unable to create CGImage"])
+        }
+
+        try writeCGImage(image, to: outputURL)
+        return
+    }
+
     guard let bitmap = NSBitmapImageRep(
         bitmapDataPlanes: nil,
         pixelsWide: Int(canvasSize.width),
@@ -242,11 +279,11 @@ private func renderIcon(variant: IconVariant, to outputURL: URL) throws {
 
     NSGraphicsContext.restoreGraphicsState()
 
-    guard let png = bitmap.representation(using: .png, properties: [:]) else {
-        throw NSError(domain: "IconGen", code: 3, userInfo: [NSLocalizedDescriptionKey: "Unable to encode PNG"])
+    guard let image = bitmap.cgImage else {
+        throw NSError(domain: "IconGen", code: 3, userInfo: [NSLocalizedDescriptionKey: "Unable to create CGImage from bitmap"])
     }
 
-    try png.write(to: outputURL)
+    try writeCGImage(image, to: outputURL)
 }
 
 let outputDirectory: URL
