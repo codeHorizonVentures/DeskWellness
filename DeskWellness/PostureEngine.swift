@@ -54,6 +54,7 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
     
     // Frame Storage for Snapshots
     private var currentFrame: CVPixelBuffer?
+    private var processedFrameCount: Int = 0
     
     // Snapshots
     var frontSnapshot: UIImage?
@@ -64,6 +65,8 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
     private let videoOutput = AVCaptureVideoDataOutput()
     public let captureSession = AVCaptureSession()
     private let sequenceHandler = VNSequenceRequestHandler()
+    private let bodyPoseRequest = VNDetectHumanBodyPoseRequest()
+    private let snapshotContext = CIContext(options: [.cacheIntermediates: false])
 
     override init() {
         super.init()
@@ -71,13 +74,19 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
     }
 
     func start() {
+        guard !captureSession.isRunning else { return }
         DispatchQueue.global(qos: .userInitiated).async {
             self.captureSession.startRunning()
         }
     }
 
     func stop() {
+        guard captureSession.isRunning else { return }
         captureSession.stopRunning()
+
+        frameLock.lock()
+        currentFrame = nil
+        frameLock.unlock()
     }
     
     func switchToSideMode() {
@@ -115,50 +124,65 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
             self.frontMissedFrames = 0
             self.sideMissedFrames = 0
         }
+
+        frameLock.lock()
+        currentFrame = nil
+        frameLock.unlock()
     }
 
     private func setupCamera() {
+        captureSession.beginConfiguration()
+        if captureSession.canSetSessionPreset(.vga640x480) {
+            captureSession.sessionPreset = .vga640x480
+        }
+
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
-              let input = try? AVCaptureDeviceInput(device: device) else { return }
+              let input = try? AVCaptureDeviceInput(device: device) else {
+            captureSession.commitConfiguration()
+            return
+        }
 
         if captureSession.canAddInput(input) { captureSession.addInput(input) }
 
+        videoOutput.alwaysDiscardsLateVideoFrames = true
         videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "videoQueue"))
         if captureSession.canAddOutput(videoOutput) { captureSession.addOutput(videoOutput) }
+        captureSession.commitConfiguration()
     }
 
     // MARK: - The "Magic" Loop (Runs every frame)
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        
-        // Store frame for snapshot
-        frameLock.lock()
-        currentFrame = CMSampleBufferGetImageBuffer(sampleBuffer)
-        frameLock.unlock()
+        autoreleasepool {
+            frameLock.lock()
+            currentFrame = CMSampleBufferGetImageBuffer(sampleBuffer)
+            frameLock.unlock()
 
-        let request = VNDetectHumanBodyPoseRequest()
+            processedFrameCount += 1
+            guard processedFrameCount.isMultiple(of: 2) else { return }
 
-        do {
-            try sequenceHandler.perform([request], on: sampleBuffer, orientation: .leftMirrored)
+            do {
+                try sequenceHandler.perform([bodyPoseRequest], on: sampleBuffer, orientation: .leftMirrored)
 
-            guard let observation = request.results?.first else {
-                DispatchQueue.main.async {
-                    self.isFrontLocked = false
-                    self.isSideLocked = false
+                guard let observation = bodyPoseRequest.results?.first else {
+                    DispatchQueue.main.async {
+                        self.isFrontLocked = false
+                        self.isSideLocked = false
+                    }
+                    return
                 }
-                return
-            }
 
-            switch detectionMode {
-            case .front:
-                processFrontPose(observation)
-            case .side:
-                processSidePose(observation)
-            }
+                switch detectionMode {
+                case .front:
+                    processFrontPose(observation)
+                case .side:
+                    processSidePose(observation)
+                }
 
-        } catch {
-            #if DEBUG
-            print("Vision Error: \(error)")
-            #endif
+            } catch {
+                #if DEBUG
+                print("Vision Error: \(error)")
+                #endif
+            }
         }
     }
     
@@ -364,8 +388,7 @@ class PostureEngine: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
         guard let pixelBuffer = buffer else { return nil }
         
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext()
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
+        guard let cgImage = snapshotContext.createCGImage(ciImage, from: ciImage.extent) else { return nil }
         
         // Use .leftMirrored for Front Camera in Portrait to appear correct (Mirrored Selfie)
         // If Back camera, usually .right is correct.
