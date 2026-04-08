@@ -1,1 +1,1 @@
-desk break,stretch,neck reset,back reset,shoulder reset,work break,sitting break,wellness
+posture,office,workday,sitting,upright,timer,neck,back,shoulder,routine

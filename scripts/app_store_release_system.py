@@ -203,6 +203,11 @@ def find_localization(localizations: list[dict[str, Any]], locale: str) -> dict[
     return None
 
 
+def get_version_localization(localization_id: str, token: str) -> dict[str, Any]:
+    response = asc.request_json("GET", f"/v1/appStoreVersionLocalizations/{localization_id}", token)
+    return response["data"]
+
+
 def ensure_app_info_localization(app_info_id: str, token: str, locale: str) -> dict[str, Any]:
     existing = find_localization(list_app_info_localizations(app_info_id, token), locale)
     if existing:
@@ -277,6 +282,7 @@ def patch_version_localization(localization_id: str, token: str, metadata: dict[
             "type": "appStoreVersionLocalizations",
             "id": localization_id,
             "attributes": {
+                "promotionalText": metadata["promotional_text"],
                 "description": metadata["description"],
                 "keywords": metadata["keywords"],
                 "marketingUrl": metadata["marketing_url"],
@@ -438,6 +444,8 @@ def build_release_report(args: argparse.Namespace) -> dict[str, Any]:
     app_info = app_info_for_app(app_id, token)
     app_info_localization = find_localization(list_app_info_localizations(app_info["id"], token), args.locale)
     version_localization = find_localization(list_version_localizations(version_id, token), args.locale)
+    if version_localization is not None:
+        version_localization = get_version_localization(version_localization["id"], token)
 
     detail = asc.request_json("GET", f"/v1/appStoreVersions/{version_id}", token, params={"include": "build"})
     build_rel = detail["data"].get("relationships", {}).get("build", {}).get("data")
@@ -479,6 +487,8 @@ def build_release_report(args: argparse.Namespace) -> dict[str, Any]:
         blockers.append(f"Missing {args.locale} version localization")
     if version_localization is not None and version_attrs.get("description") != metadata["description"]:
         blockers.append("description is not aligned to the repo baseline")
+    if version_localization is not None and version_attrs.get("promotionalText") != metadata["promotional_text"]:
+        blockers.append("promotional text is not aligned to the repo baseline")
     if version_localization is not None and version_attrs.get("keywords") != metadata["keywords"]:
         blockers.append("keywords are not aligned to the repo baseline")
     if version_localization is not None and version_attrs.get("supportUrl") != metadata["support_url"]:
@@ -533,6 +543,7 @@ def build_release_report(args: argparse.Namespace) -> dict[str, Any]:
         },
         "versionLocalization": {
             "locale": args.locale,
+            "promotionalText": version_attrs.get("promotionalText"),
             "description": version_attrs.get("description"),
             "keywords": version_attrs.get("keywords"),
             "supportUrl": version_attrs.get("supportUrl"),
@@ -597,18 +608,23 @@ def command_sync_metadata(args: argparse.Namespace) -> int:
         privacy_url=metadata["privacy_url"],
     )
     patch_version_localization(version_localization["id"], token, metadata)
+    refreshed_version_localization = get_version_localization(version_localization["id"], token)
+    refreshed_attrs = refreshed_version_localization.get("attributes", {})
 
     print(
         json.dumps(
             {
                 "appId": app_id,
                 "versionId": version["id"],
+                "versionLocalizationId": refreshed_version_localization["id"],
                 "versionString": version.get("attributes", {}).get("versionString"),
                 "locale": args.locale,
+                "livePromotionalText": refreshed_attrs.get("promotionalText"),
                 "synced": [
                     "app name",
                     "subtitle",
                     "privacy URL",
+                    "promotional text",
                     "description",
                     "keywords",
                     "support URL",
