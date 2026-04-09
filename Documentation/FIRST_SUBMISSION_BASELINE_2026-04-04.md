@@ -86,7 +86,8 @@ Export helper:
 
 1. Keep the approved screenshot set in `marketing/app_store/screenshots/iphone-6.9/en-US/final/` as the upload baseline.
 2. Keep the existing App Store Connect record aligned with `python3 scripts/app_store_release_system.py sync-metadata`.
-3. Keep the App Store screenshot set aligned with `python3 scripts/app_store_release_system.py sync-iphone-screenshots`.
-4. Run and record the real-device release checklist from `Documentation/RELEASE_READINESS_CHECKLIST_2026-04-03.md`.
+3. Keep category, review-contact, and copyright fields aligned with `python3 scripts/app_store_release_system.py sync-app-record --contact-phone '<real monitored phone>'`.
+4. Keep the App Store screenshot set aligned with `python3 scripts/app_store_release_system.py sync-iphone-screenshots`.
+5. Run and record the real-device release checklist from `Documentation/RELEASE_READINESS_CHECKLIST_2026-04-03.md`.
 5. Complete the manual App Store operator fields from `Documentation/APP_STORE_OPERATOR_MATRIX_2026-04-04.md`.
 6. Archive and upload the signed build for the selected App Store version if the attached build is not the intended release candidate.

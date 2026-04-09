@@ -8,6 +8,7 @@
 import SwiftUI
 
 import AVKit
+import SwiftData
 
 // MARK: - Models
 
@@ -59,11 +60,13 @@ struct PostureTipsData {
 // MARK: - Views
 
 struct PostureTipView: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.presentationMode) var presentationMode
     @State private var currentIndex = 0
     @State private var timeRemaining: TimeInterval = 60
     @State private var timerActive = false
     @State private var showCompletion = false
+    @State private var hasLoggedCompletion = false
     
     let tips = PostureTipsData.deskReset
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -85,16 +88,21 @@ struct PostureTipView: View {
                             .foregroundColor(.white.opacity(0.7))
                     }
                     Spacer()
-                    Button(action: { presentationMode.wrappedValue.dismiss() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.gray)
+                    if showCompletion {
+                        Color.clear
+                            .frame(width: 24, height: 24)
+                    } else {
+                        Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.gray)
+                        }
                     }
                 }
                 .padding()
                 
                 if showCompletion {
-                    CompletionView { presentationMode.wrappedValue.dismiss() }
+                    CompletionView(onDismiss: completeResetAndDismiss)
                 } else {
                     // Progress Bar
                     ProgressBar(current: currentIndex + 1, total: tips.count)
@@ -127,6 +135,7 @@ struct PostureTipView: View {
                 nextExercise()
             }
         }
+        .interactiveDismissDisabled(showCompletion && !hasLoggedCompletion)
     }
     
     private func nextExercise() {
@@ -142,6 +151,19 @@ struct PostureTipView: View {
                 timerActive = false
             }
         }
+    }
+
+    private func logCompletedResetIfNeeded() {
+        guard !hasLoggedCompletion else { return }
+
+        modelContext.insert(DailyEntry.completedQuickResetEntry())
+        try? modelContext.save()
+        hasLoggedCompletion = true
+    }
+
+    private func completeResetAndDismiss() {
+        logCompletedResetIfNeeded()
+        presentationMode.wrappedValue.dismiss()
     }
 }
 
@@ -275,6 +297,12 @@ struct CompletionView: View {
                     .foregroundColor(.gray)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
+
+                Text("Tap Done to add this reset to your journal.")
+                    .font(.subheadline)
+                    .foregroundColor(.green.opacity(0.9))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
             }
             
             Spacer()
@@ -288,6 +316,7 @@ struct CompletionView: View {
                     .background(Color.white)
                     .cornerRadius(12)
             }
+            .accessibilityIdentifier("desk_reset_completion_done_button")
             .padding(.horizontal, 40)
             .padding(.bottom, 40)
         }

@@ -53,11 +53,11 @@ Screen:
 
 Headline:
 
-`Desk resets for long workdays`
+`Desk breaks for long workdays`
 
 Support line:
 
-`Quick relief for neck, shoulders, and back`
+`Quick guided resets for neck, shoulders, and back during long sitting stretches`
 
 Goal:
 
@@ -72,11 +72,11 @@ Screen:
 
 Headline:
 
-`Start a reset in seconds`
+`Start a break in one tap`
 
 Support line:
 
-`Build a healthier desk routine one break at a time`
+`Reset, check in, or open your journal from the home screen`
 
 Goal:
 
@@ -91,11 +91,11 @@ Screen:
 
 Headline:
 
-`Set your workday reminders`
+`Make desk breaks automatic`
 
 Support line:
 
-`Choose when ResetMinute nudges you to move`
+`Choose when ResetMinute nudges you to move during work`
 
 Goal:
 
@@ -110,11 +110,11 @@ Screen:
 
 Headline:
 
-`Short resets for desk discomfort`
+`Take a desk reset between meetings`
 
 Support line:
 
-`Move your neck, shoulders, and back in under a minute`
+`A quick desk break for screen-heavy workdays`
 
 Goal:
 
@@ -133,7 +133,7 @@ Headline:
 
 Support line:
 
-`Track resets, active days, and optional check-ins`
+`Track resets, active days, and optional check-ins in one calm weekly view`
 
 Goal:
 

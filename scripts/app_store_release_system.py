@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import sys
@@ -25,6 +26,11 @@ DEFAULT_APP_ID = "6745263811"
 DEFAULT_BUNDLE_ID = "chv.desk.wellness"
 DEFAULT_LOCALE = "en-US"
 IPHONE_SLOT = "APP_IPHONE_67"
+DEFAULT_PRIMARY_CATEGORY = "Health & Fitness"
+DEFAULT_SECONDARY_CATEGORY = "Productivity"
+DEFAULT_REVIEW_CONTACT_NAME = "Petro Kulakov"
+DEFAULT_REVIEW_CONTACT_EMAIL = "support@familyfund.app"
+DEFAULT_COPYRIGHT = "2026 Petro Kulakov"
 
 
 class ReleasePreparationError(RuntimeError):
@@ -196,6 +202,68 @@ def app_info_for_app(app_id: str, token: str) -> dict[str, Any]:
     return app_infos[0]
 
 
+def get_app_info(app_info_id: str, token: str, *, include: str | None = None) -> dict[str, Any]:
+    params = {"include": include} if include else None
+    response = asc.request_json("GET", f"/v1/appInfos/{app_info_id}", token, params=params)
+    return response
+
+
+def list_app_categories(token: str) -> list[dict[str, Any]]:
+    return asc.flatten_json_api_data(
+        asc.iter_json_pages(
+            "/v1/appCategories",
+            token,
+            params={"limit": 200},
+        )
+    )
+
+
+def find_category(category_name: str, token: str) -> dict[str, Any]:
+    normalized_query = normalize_category_token(category_name)
+    matches = [
+        category
+        for category in list_app_categories(token)
+        if (
+            category.get("attributes", {}).get("name", "").casefold() == category_name.casefold()
+            or category.get("id", "").upper() == normalized_query
+        )
+    ]
+    if not matches:
+        raise ReleasePreparationError(f"App Store category '{category_name}' not found")
+    if len(matches) > 1:
+        raise ReleasePreparationError(f"App Store category '{category_name}' is ambiguous")
+    return matches[0]
+
+
+def category_name_by_id(included: list[dict[str, Any]], category_id: str | None) -> str | None:
+    if not category_id:
+        return None
+    for item in included:
+        if item.get("type") == "appCategories" and item.get("id") == category_id:
+            return item.get("attributes", {}).get("name") or item.get("id")
+    return category_id
+
+
+def normalize_category_token(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value.upper().replace("&", "AND")
+    return re.sub(r"[^A-Z0-9]+", "_", normalized).strip("_")
+
+
+def split_contact_name(full_name: str) -> tuple[str, str]:
+    parts = [part for part in full_name.strip().split() if part]
+    if not parts:
+        raise ReleasePreparationError("Review contact name cannot be empty")
+    if len(parts) == 1:
+        return parts[0], parts[0]
+    return parts[0], " ".join(parts[1:])
+
+
+def review_contact_phone(args: argparse.Namespace) -> str | None:
+    return getattr(args, "contact_phone", None) or os.environ.get("ASC_REVIEW_CONTACT_PHONE")
+
+
 def find_localization(localizations: list[dict[str, Any]], locale: str) -> dict[str, Any] | None:
     for localization in localizations:
         if localization.get("attributes", {}).get("locale") == locale:
@@ -291,6 +359,122 @@ def patch_version_localization(localization_id: str, token: str, metadata: dict[
         }
     }
     asc.request_json("PATCH", f"/v1/appStoreVersionLocalizations/{localization_id}", token, payload=payload)
+
+
+def patch_app_info_categories(
+    app_info_id: str,
+    token: str,
+    *,
+    primary_category_id: str,
+    secondary_category_id: str | None,
+) -> None:
+    relationships: dict[str, Any] = {
+        "primaryCategory": {
+            "data": {
+                "type": "appCategories",
+                "id": primary_category_id,
+            }
+        }
+    }
+    if secondary_category_id:
+        relationships["secondaryCategory"] = {
+            "data": {
+                "type": "appCategories",
+                "id": secondary_category_id,
+            }
+        }
+
+    payload = {
+        "data": {
+            "type": "appInfos",
+            "id": app_info_id,
+            "relationships": relationships,
+        }
+    }
+    asc.request_json("PATCH", f"/v1/appInfos/{app_info_id}", token, payload=payload)
+
+
+def get_app_store_review_detail(version_id: str, token: str) -> dict[str, Any] | None:
+    response = asc.request_json(
+        "GET",
+        f"/v1/appStoreVersions/{version_id}",
+        token,
+        params={"include": "appStoreReviewDetail"},
+    )
+    relationship = response.get("data", {}).get("relationships", {}).get("appStoreReviewDetail", {}).get("data")
+    if relationship:
+        for item in response.get("included", []):
+            if item.get("type") == "appStoreReviewDetails" and item.get("id") == relationship.get("id"):
+                return item
+    return None
+
+
+def ensure_app_store_review_detail(version_id: str, token: str) -> dict[str, Any]:
+    existing = get_app_store_review_detail(version_id, token)
+    if existing:
+        return existing
+
+    payload = {
+        "data": {
+            "type": "appStoreReviewDetails",
+            "attributes": {
+                "demoAccountRequired": False,
+            },
+            "relationships": {
+                "appStoreVersion": {
+                    "data": {
+                        "type": "appStoreVersions",
+                        "id": version_id,
+                    }
+                }
+            },
+        }
+    }
+    response = asc.request_json("POST", "/v1/appStoreReviewDetails", token, payload=payload)
+    return response["data"]
+
+
+def patch_app_store_review_detail(
+    review_detail_id: str,
+    token: str,
+    *,
+    contact_name: str,
+    contact_email: str,
+    contact_phone: str | None,
+    notes: str,
+) -> None:
+    first_name, last_name = split_contact_name(contact_name)
+    attributes: dict[str, Any] = {
+        "contactFirstName": first_name,
+        "contactLastName": last_name,
+        "contactEmail": contact_email,
+        "demoAccountRequired": False,
+        "notes": notes,
+    }
+    if contact_phone:
+        attributes["contactPhone"] = contact_phone
+
+    payload = {
+        "data": {
+            "type": "appStoreReviewDetails",
+            "id": review_detail_id,
+            "attributes": attributes,
+        }
+    }
+    asc.request_json("PATCH", f"/v1/appStoreReviewDetails/{review_detail_id}", token, payload=payload)
+
+
+def patch_app_store_version(version_id: str, token: str, *, copyright_text: str) -> None:
+    payload = {
+        "data": {
+            "type": "appStoreVersions",
+            "id": version_id,
+            "attributes": {
+                "copyright": copyright_text,
+            },
+        }
+    }
+    asc.request_json("PATCH", f"/v1/appStoreVersions/{version_id}", token, payload=payload)
 
 
 def screenshot_sets_for_localization(localization_id: str, token: str) -> list[dict[str, Any]]:
@@ -442,16 +626,32 @@ def build_release_report(args: argparse.Namespace) -> dict[str, Any]:
     app_attributes = app_response["data"]["attributes"]
 
     app_info = app_info_for_app(app_id, token)
+    app_info_detail = get_app_info(app_info["id"], token, include="primaryCategory,secondaryCategory")
     app_info_localization = find_localization(list_app_info_localizations(app_info["id"], token), args.locale)
     version_localization = find_localization(list_version_localizations(version_id, token), args.locale)
     if version_localization is not None:
         version_localization = get_version_localization(version_localization["id"], token)
 
-    detail = asc.request_json("GET", f"/v1/appStoreVersions/{version_id}", token, params={"include": "build"})
+    detail = asc.request_json(
+        "GET",
+        f"/v1/appStoreVersions/{version_id}",
+        token,
+        params={"include": "build,appStoreReviewDetail"},
+    )
     build_rel = detail["data"].get("relationships", {}).get("build", {}).get("data")
     build_id = build_rel.get("id") if build_rel else None
     build = next((item for item in detail.get("included", []) if item.get("type") == "builds"), None)
     build_attributes = build.get("attributes", {}) if build else {}
+    review_detail_rel = detail["data"].get("relationships", {}).get("appStoreReviewDetail", {}).get("data")
+    review_detail = next(
+        (
+            item
+            for item in detail.get("included", [])
+            if item.get("type") == "appStoreReviewDetails" and item.get("id") == (review_detail_rel or {}).get("id")
+        ),
+        None,
+    )
+    review_attrs = review_detail.get("attributes", {}) if review_detail else {}
 
     screenshot_sets = screenshot_sets_for_localization(version_localization["id"], token) if version_localization else []
     screenshot_counts = {
@@ -468,6 +668,21 @@ def build_release_report(args: argparse.Namespace) -> dict[str, Any]:
 
     app_info_attrs = app_info_localization.get("attributes", {}) if app_info_localization else {}
     version_attrs = version_localization.get("attributes", {}) if version_localization else {}
+    app_info_detail_data = app_info_detail.get("data", {})
+    app_info_detail_relationships = app_info_detail_data.get("relationships", {})
+    app_info_included = app_info_detail.get("included", [])
+    primary_category_rel = app_info_detail_relationships.get("primaryCategory", {}).get("data") or {}
+    secondary_category_rel = app_info_detail_relationships.get("secondaryCategory", {}).get("data") or {}
+    primary_category_id = primary_category_rel.get("id")
+    secondary_category_id = secondary_category_rel.get("id")
+    primary_category_name = category_name_by_id(app_info_included, primary_category_id)
+    secondary_category_name = category_name_by_id(app_info_included, secondary_category_id)
+    desired_primary_category = getattr(args, "primary_category", DEFAULT_PRIMARY_CATEGORY)
+    desired_secondary_category = getattr(args, "secondary_category", DEFAULT_SECONDARY_CATEGORY)
+    desired_copyright = getattr(args, "copyright", DEFAULT_COPYRIGHT)
+    desired_contact_name = getattr(args, "contact_name", DEFAULT_REVIEW_CONTACT_NAME)
+    desired_contact_email = getattr(args, "contact_email", DEFAULT_REVIEW_CONTACT_EMAIL)
+    desired_contact_phone = review_contact_phone(args)
     live_min_os = build_attributes.get("minOsVersion")
 
     blockers: list[str] = []
@@ -483,6 +698,14 @@ def build_release_report(args: argparse.Namespace) -> dict[str, Any]:
         blockers.append(
             f"privacy URL is {app_info_attrs.get('privacyPolicyUrl') or 'nil'} expected {metadata['privacy_url']}"
         )
+    if normalize_category_token(primary_category_name) != normalize_category_token(desired_primary_category):
+        blockers.append(
+            f"primary category is {primary_category_name or 'nil'} expected {desired_primary_category}"
+        )
+    if normalize_category_token(secondary_category_name) != normalize_category_token(desired_secondary_category):
+        blockers.append(
+            f"secondary category is {secondary_category_name or 'nil'} expected {desired_secondary_category}"
+        )
     if version_localization is None:
         blockers.append(f"Missing {args.locale} version localization")
     if version_localization is not None and version_attrs.get("description") != metadata["description"]:
@@ -497,6 +720,31 @@ def build_release_report(args: argparse.Namespace) -> dict[str, Any]:
         blockers.append(
             f"marketing URL is {version_attrs.get('marketingUrl') or 'nil'} expected {metadata['marketing_url']}"
         )
+    if version.get("attributes", {}).get("copyright") != desired_copyright:
+        blockers.append(
+            f"copyright is {version.get('attributes', {}).get('copyright') or 'nil'} expected {desired_copyright}"
+        )
+    if not review_detail:
+        blockers.append("Missing App Store review detail")
+    if review_detail and review_attrs.get("contactFirstName") != split_contact_name(desired_contact_name)[0]:
+        blockers.append(
+            f"review contact first name is {review_attrs.get('contactFirstName') or 'nil'} expected {split_contact_name(desired_contact_name)[0]}"
+        )
+    if review_detail and review_attrs.get("contactLastName") != split_contact_name(desired_contact_name)[1]:
+        blockers.append(
+            f"review contact last name is {review_attrs.get('contactLastName') or 'nil'} expected {split_contact_name(desired_contact_name)[1]}"
+        )
+    if review_detail and review_attrs.get("contactEmail") != desired_contact_email:
+        blockers.append(
+            f"review contact email is {review_attrs.get('contactEmail') or 'nil'} expected {desired_contact_email}"
+        )
+    if desired_contact_phone:
+        if review_detail and review_attrs.get("contactPhone") != desired_contact_phone:
+            blockers.append(
+                f"review contact phone is {review_attrs.get('contactPhone') or 'nil'} expected {desired_contact_phone}"
+            )
+    elif review_detail and not review_attrs.get("contactPhone"):
+        blockers.append("review contact phone is missing")
     if project_version and version.get("attributes", {}).get("versionString") != project_version:
         blockers.append(
             f"App Store version is {version.get('attributes', {}).get('versionString')} but project marketing version is {project_version}"
@@ -540,6 +788,8 @@ def build_release_report(args: argparse.Namespace) -> dict[str, Any]:
             "name": app_info_attrs.get("name"),
             "subtitle": app_info_attrs.get("subtitle"),
             "privacyPolicyUrl": app_info_attrs.get("privacyPolicyUrl"),
+            "primaryCategory": primary_category_name,
+            "secondaryCategory": secondary_category_name,
         },
         "versionLocalization": {
             "locale": args.locale,
@@ -562,9 +812,23 @@ def build_release_report(args: argparse.Namespace) -> dict[str, Any]:
             "uploadedDate": build_attributes.get("uploadedDate"),
             "minOsVersion": live_min_os,
         },
+        "reviewDetail": {
+            "id": review_detail.get("id") if review_detail else None,
+            "contactFirstName": review_attrs.get("contactFirstName"),
+            "contactLastName": review_attrs.get("contactLastName"),
+            "contactEmail": review_attrs.get("contactEmail"),
+            "contactPhone": review_attrs.get("contactPhone"),
+            "notesPresent": bool(review_attrs.get("notes")),
+            "demoAccountRequired": review_attrs.get("demoAccountRequired"),
+        },
+        "versionMetadata": {
+            "copyright": version.get("attributes", {}).get("copyright"),
+        },
         "manualBlockers": blockers,
         "manualSteps": [
             "Complete the App Privacy answers in App Store Connect so they match the current local-first camera and reminder behavior.",
+            "Set Content Rights Information in App Store Connect so it matches the final bundled assets and their ownership.",
+            "Choose the final App Store price tier in App Store Connect if it has not already been saved.",
             "Run and record the real-device release checklist before submitting the first version.",
             "Archive and upload a signed build that matches the selected App Store version, then attach it if no VALID build is present.",
         ],
@@ -637,6 +901,88 @@ def command_sync_metadata(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_sync_app_record(args: argparse.Namespace) -> int:
+    metadata = read_metadata(args.locale)
+    token = load_token(args)
+    app_id = resolve_app_id(token, args.bundle_id, args.app_id)
+    version_string = args.version or project_marketing_version()
+    if args.create_version_if_missing and version_string:
+        version = ensure_version(app_id, token, version_string)
+    else:
+        version = find_version(app_id, token, args.version)
+
+    app_info = app_info_for_app(app_id, token)
+    primary_category = find_category(args.primary_category, token)
+    secondary_category = find_category(args.secondary_category, token) if args.secondary_category else None
+    patch_app_info_categories(
+        app_info["id"],
+        token,
+        primary_category_id=primary_category["id"],
+        secondary_category_id=secondary_category["id"] if secondary_category else None,
+    )
+
+    patch_app_store_version(version["id"], token, copyright_text=args.copyright)
+
+    review_detail = ensure_app_store_review_detail(version["id"], token)
+    patch_app_store_review_detail(
+        review_detail["id"],
+        token,
+        contact_name=args.contact_name,
+        contact_email=args.contact_email,
+        contact_phone=review_contact_phone(args),
+        notes=metadata["review_notes"],
+    )
+
+    refreshed_app_info = get_app_info(app_info["id"], token, include="primaryCategory,secondaryCategory")
+    refreshed_version = asc.request_json("GET", f"/v1/appStoreVersions/{version['id']}", token)
+    refreshed_review_detail = get_app_store_review_detail(version["id"], token)
+
+    relationships = refreshed_app_info.get("data", {}).get("relationships", {})
+    included = refreshed_app_info.get("included", [])
+    refreshed_primary = category_name_by_id(
+        included,
+        (relationships.get("primaryCategory", {}).get("data") or {}).get("id"),
+    )
+    refreshed_secondary = category_name_by_id(
+        included,
+        (relationships.get("secondaryCategory", {}).get("data") or {}).get("id"),
+    )
+    refreshed_review_attrs = refreshed_review_detail.get("attributes", {}) if refreshed_review_detail else {}
+
+    print(
+        json.dumps(
+            {
+                "appId": app_id,
+                "versionId": version["id"],
+                "versionString": version.get("attributes", {}).get("versionString"),
+                "primaryCategory": refreshed_primary,
+                "secondaryCategory": refreshed_secondary,
+                "copyright": refreshed_version.get("data", {}).get("attributes", {}).get("copyright"),
+                "reviewContactName": " ".join(
+                    part
+                    for part in [
+                        refreshed_review_attrs.get("contactFirstName"),
+                        refreshed_review_attrs.get("contactLastName"),
+                    ]
+                    if part
+                ),
+                "reviewContactEmail": refreshed_review_attrs.get("contactEmail"),
+                "reviewContactPhone": refreshed_review_attrs.get("contactPhone"),
+                "reviewNotesPresent": bool(refreshed_review_attrs.get("notes")),
+                "synced": [
+                    "primary category",
+                    "secondary category",
+                    "copyright",
+                    "review contact",
+                    "review notes",
+                ],
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
 def command_sync_iphone_screenshots(args: argparse.Namespace) -> int:
     token = load_token(args)
     app_id = resolve_app_id(token, args.bundle_id, args.app_id)
@@ -668,6 +1014,23 @@ def command_verify(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_list_categories(args: argparse.Namespace) -> int:
+    token = load_token(args)
+    categories = list_app_categories(token)
+    payload = [
+        {
+            "id": category.get("id"),
+            "type": category.get("type"),
+            "name": category.get("attributes", {}).get("name"),
+            "parent": category.get("relationships", {}).get("parent", {}).get("data"),
+            "subcategories": category.get("relationships", {}).get("subcategories", {}).get("data"),
+        }
+        for category in categories
+    ]
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="ResetMinute App Store release preparation system.")
     parser.add_argument("--issuer-id", help="App Store Connect API issuer ID. Defaults to ASC_ISSUER_ID.")
@@ -694,6 +1057,26 @@ def build_parser() -> argparse.ArgumentParser:
     sync_metadata_parser.add_argument("--create-version-if-missing", action="store_true")
     sync_metadata_parser.set_defaults(func=command_sync_metadata)
 
+    sync_app_record_parser = subparsers.add_parser(
+        "sync-app-record",
+        help="Sync App Store app-record fields that are not part of localized metadata.",
+    )
+    sync_app_record_parser.add_argument("--app-id", default=DEFAULT_APP_ID)
+    sync_app_record_parser.add_argument("--bundle-id", default=DEFAULT_BUNDLE_ID)
+    sync_app_record_parser.add_argument("--version", help="Explicit App Store version string.")
+    sync_app_record_parser.add_argument("--locale", default=DEFAULT_LOCALE)
+    sync_app_record_parser.add_argument("--create-version-if-missing", action="store_true")
+    sync_app_record_parser.add_argument("--primary-category", default=DEFAULT_PRIMARY_CATEGORY)
+    sync_app_record_parser.add_argument("--secondary-category", default=DEFAULT_SECONDARY_CATEGORY)
+    sync_app_record_parser.add_argument("--contact-name", default=DEFAULT_REVIEW_CONTACT_NAME)
+    sync_app_record_parser.add_argument("--contact-email", default=DEFAULT_REVIEW_CONTACT_EMAIL)
+    sync_app_record_parser.add_argument(
+        "--contact-phone",
+        help="Review contact phone number. Defaults to ASC_REVIEW_CONTACT_PHONE if set.",
+    )
+    sync_app_record_parser.add_argument("--copyright", default=DEFAULT_COPYRIGHT)
+    sync_app_record_parser.set_defaults(func=command_sync_app_record)
+
     sync_screenshots_parser = subparsers.add_parser(
         "sync-iphone-screenshots",
         help="Upload the approved iPhone 6.9 screenshot set for the selected App Store version.",
@@ -713,8 +1096,23 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("--bundle-id", default=DEFAULT_BUNDLE_ID)
     verify_parser.add_argument("--version", help="Explicit App Store version string.")
     verify_parser.add_argument("--locale", default=DEFAULT_LOCALE)
+    verify_parser.add_argument("--primary-category", default=DEFAULT_PRIMARY_CATEGORY)
+    verify_parser.add_argument("--secondary-category", default=DEFAULT_SECONDARY_CATEGORY)
+    verify_parser.add_argument("--contact-name", default=DEFAULT_REVIEW_CONTACT_NAME)
+    verify_parser.add_argument("--contact-email", default=DEFAULT_REVIEW_CONTACT_EMAIL)
+    verify_parser.add_argument(
+        "--contact-phone",
+        help="Expected review contact phone number. Defaults to ASC_REVIEW_CONTACT_PHONE if set.",
+    )
+    verify_parser.add_argument("--copyright", default=DEFAULT_COPYRIGHT)
     verify_parser.add_argument("--report-path")
     verify_parser.set_defaults(func=command_verify)
+
+    categories_parser = subparsers.add_parser(
+        "list-categories",
+        help="List App Store categories visible to the API key.",
+    )
+    categories_parser.set_defaults(func=command_list_categories)
 
     return parser
 

@@ -103,6 +103,15 @@ class DailyEntry {
 }
 
 extension DailyEntry {
+    static func completedQuickResetEntry(date: Date = Date()) -> DailyEntry {
+        DailyEntry(
+            date: date,
+            type: .workout,
+            note: "Guided quick reset.",
+            exercisesCompleted: true
+        )
+    }
+
     static var screenshotDemoEntries: [DailyEntry] {
         [
             DailyEntry(

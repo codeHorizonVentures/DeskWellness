@@ -15,6 +15,7 @@ struct MagicMirrorView: View {
     @StateObject private var engine = PostureEngine()
     @State private var feedbackGenerator = UINotificationFeedbackGenerator()
     @State private var showCameraPermissionAlert = false
+    @State private var cameraPermissionAlertMode: CameraPermissionAlertMode = .restricted
     @State private var previousAngle: Double = 0
 
     var body: some View {
@@ -101,14 +102,16 @@ struct MagicMirrorView: View {
             engine.stop()
         }
         .alert("Camera Access Required", isPresented: $showCameraPermissionAlert) {
-            Button("Open Settings") {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
+            if cameraPermissionAlertMode.showsSettingsShortcut {
+                Button("Not Now", role: .cancel) { }
+                Button("Open Settings") {
+                    openAppSettings()
                 }
+            } else {
+                Button("OK", role: .cancel) { }
             }
-            Button("Cancel", role: .cancel) { }
         } message: {
-            Text("ResetMinute uses the camera for optional check-ins. Images and pose data stay on your device and are only saved locally if you choose to add a check-in to your journal.")
+            Text(cameraPermissionAlertMode.message)
         }
     }
 
@@ -124,15 +127,27 @@ struct MagicMirrorView: View {
                     if granted {
                         engine.start()
                     } else {
-                        showCameraPermissionAlert = true
+                        presentCameraPermissionAlert(for: .denied)
                     }
                 }
             }
-        case .denied, .restricted:
-            showCameraPermissionAlert = true
+        case .denied:
+            presentCameraPermissionAlert(for: .denied)
+        case .restricted:
+            presentCameraPermissionAlert(for: .restricted)
         @unknown default:
-            showCameraPermissionAlert = true
+            presentCameraPermissionAlert(for: .restricted)
         }
+    }
+
+    private func presentCameraPermissionAlert(for mode: CameraPermissionAlertMode) {
+        cameraPermissionAlertMode = mode
+        showCameraPermissionAlert = true
+    }
+
+    private func openAppSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     // MARK: - Haptic Feedback

@@ -49,6 +49,7 @@ Update or verify the existing App Store Connect app record with:
 - primary category: `Health & Fitness`
 - secondary category: `Productivity`
 - age rating and export-compliance answers completed
+- content rights information completed
 - support URL: `https://familyfund.app/resetminute/support/`
 - privacy policy URL: `https://familyfund.app/resetminute/privacy/`
 - marketing URL: `https://familyfund.app/resetminute/`
@@ -72,6 +73,12 @@ Fill the first English metadata entry from:
 Operator matrix:
 
 - `Documentation/APP_STORE_OPERATOR_MATRIX_2026-04-04.md`
+
+Automation:
+
+- sync localized listing fields with `python3 scripts/app_store_release_system.py sync-metadata`
+- sync category/review/copyright fields with `python3 scripts/app_store_release_system.py sync-app-record`
+- pass `--contact-phone '<real monitored phone>'` or set `ASC_REVIEW_CONTACT_PHONE` before syncing the review contact block
 
 ## Screenshot handoff
 
@@ -144,7 +151,8 @@ These are still blockers even after the ASC record exists:
 
 1. approve the five raw screenshots
 2. sync the existing app record metadata with `python3 scripts/app_store_release_system.py sync-metadata`
-3. upload the approved screenshot set with `python3 scripts/app_store_release_system.py sync-iphone-screenshots`
-4. run the real-device release checklist
-5. archive and upload the signed build that matches the selected App Store version
-6. attach the build and complete submission metadata
+3. sync the app record fields with `python3 scripts/app_store_release_system.py sync-app-record --contact-phone '<real monitored phone>'`
+4. upload the approved screenshot set with `python3 scripts/app_store_release_system.py sync-iphone-screenshots`
+5. run the real-device release checklist
+6. archive and upload the signed build that matches the selected App Store version
+7. attach the build and complete submission metadata

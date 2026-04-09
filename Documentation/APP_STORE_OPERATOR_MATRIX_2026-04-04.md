@@ -111,6 +111,7 @@ If the product later starts sending any user data off device, these answers must
 Current product recommendation:
 
 - all objectionable-content descriptors: `None`
+- health or wellness topics: `Infrequent` or the lowest non-zero setting available for wellness content
 - medical or treatment information: `None`
 - unrestricted web access: `No`
 - user-generated content: `No`
@@ -118,7 +119,27 @@ Current product recommendation:
 
 Expected outcome:
 
-- the minimum age rating available for the current questionnaire path
+- likely `9+` on Apple global age ratings because the app contains health and wellness topics, while still avoiding medical or treatment information
+
+Reason:
+
+- Apple’s current age-rating definitions place health and wellness topics in the `9+` tier
+- ResetMinute is a general-wellness app with exercise and self-care guidance, but it is not a medical or treatment app
+
+## Content Rights
+
+Use:
+
+- `No` for third-party content only if all bundled videos, images, copy, and branding used in the app are first-party assets that you created or directly own
+
+If any shipped asset is licensed from a third party:
+
+- select the option indicating the app contains, shows, or accesses third-party content
+- only proceed if you have the necessary rights for App Store distribution
+
+Current repo-based recommendation:
+
+- use the first-party path unless you know a bundled media asset is externally licensed
 
 ## Export compliance
 

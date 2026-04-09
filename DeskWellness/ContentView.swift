@@ -13,6 +13,24 @@ import SwiftData
 
 // MARK: - App State Machine
 
+enum CameraPermissionAlertMode {
+    case denied
+    case restricted
+
+    var message: String {
+        switch self {
+        case .denied:
+            return "Camera access is off for optional check-ins. You can keep using quick resets, or open Settings to turn check-ins back on."
+        case .restricted:
+            return "Optional check-ins need camera access. Quick resets still work without it."
+        }
+    }
+
+    var showsSettingsShortcut: Bool {
+        self == .denied
+    }
+}
+
 enum AppState {
     case home
     case frontScanning              // Phase 1: Front-facing detection
@@ -56,6 +74,7 @@ struct ContentView: View {
     @State private var lastSpeechTime: Date = .distantPast
     @State private var showJournal = false
     @State private var showCameraPermissionAlert = false
+    @State private var cameraPermissionAlertMode: CameraPermissionAlertMode = .restricted
     @State private var frontScore: FrontScore? = nil
     @State private var showPostureTips = false
     @State private var frontSnapshot: UIImage?
@@ -214,7 +233,7 @@ struct ContentView: View {
                             frontPointsData: frontData,
                             sidePointsData: sideData
                         )
-                        modelContext.insert(entry)
+                        persist(entry)
                     }, onShowJournal: {
                         showJournal = true
                     })
@@ -230,14 +249,16 @@ struct ContentView: View {
             handleScanTimer()
         }
         .alert("Camera Access Required", isPresented: $showCameraPermissionAlert) {
-            Button("Open Settings") {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
+            if cameraPermissionAlertMode.showsSettingsShortcut {
+                Button("Not Now", role: .cancel) { }
+                Button("Open Settings") {
+                    openAppSettings()
                 }
+            } else {
+                Button("OK", role: .cancel) { }
             }
-            Button("Cancel", role: .cancel) { }
         } message: {
-            Text("ResetMinute uses the camera for optional check-ins. Images and pose data stay on your device and are only saved locally if you choose Save to Journal.")
+            Text(cameraPermissionAlertMode.message)
         }
         .sheet(isPresented: $showPostureTips) {
             PostureTipView()
@@ -252,7 +273,8 @@ struct ContentView: View {
             }
         }
         .task {
-            try? await ReminderScheduler.syncFromDefaults()
+            clearEntriesForUITestIfNeeded()
+            _ = try? await ReminderScheduler.syncFromDefaults()
             decideOnboardingPresentationIfNeeded()
         }
     }
@@ -295,9 +317,27 @@ struct ContentView: View {
         }
     }
 
+    private func clearEntriesForUITestIfNeeded() {
+        guard launchArguments.contains("-ResetMinuteDeleteAllEntries") else { return }
+
+        let descriptor = FetchDescriptor<DailyEntry>()
+        let persistedEntries = (try? modelContext.fetch(descriptor)) ?? []
+
+        for entry in persistedEntries {
+            modelContext.delete(entry)
+        }
+
+        try? modelContext.save()
+    }
+
     // MARK: - Camera Permission
 
     private func beginCheckInFlow() {
+        if launchArguments.contains("-ResetMinuteSimulateCameraDenied") {
+            presentCameraPermissionAlert(for: .denied)
+            return
+        }
+
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             scanDuration = 0
@@ -317,14 +357,16 @@ struct ContentView: View {
                             appState = .frontScanning
                         }
                     } else {
-                        showCameraPermissionAlert = true
+                        presentCameraPermissionAlert(for: .denied)
                     }
                 }
             }
-        case .denied, .restricted:
-            showCameraPermissionAlert = true
+        case .denied:
+            presentCameraPermissionAlert(for: .denied)
+        case .restricted:
+            presentCameraPermissionAlert(for: .restricted)
         @unknown default:
-            showCameraPermissionAlert = true
+            presentCameraPermissionAlert(for: .restricted)
         }
     }
 
@@ -337,6 +379,21 @@ struct ContentView: View {
         withAnimation {
             appState = .home
         }
+    }
+
+    private func persist(_ entry: DailyEntry) {
+        modelContext.insert(entry)
+        try? modelContext.save()
+    }
+
+    private func presentCameraPermissionAlert(for mode: CameraPermissionAlertMode) {
+        cameraPermissionAlertMode = mode
+        showCameraPermissionAlert = true
+    }
+
+    private func openAppSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     // MARK: - Speech with Debounce
