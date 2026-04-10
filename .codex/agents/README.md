@@ -35,4 +35,5 @@ The main Codex agent remains the integration lead. These files define the specia
 - if Codex has spare concurrency, start more roles immediately
 - if Codex is limited, rotate the specialist and market waves in batches
 - keep the full roster as the standing team even when activation happens in waves
+- treat behavior-focused testing as the default execution model for engineering work
 - keep DeskWellness in the non-certified wellness lane unless the user explicitly changes strategy

@@ -11,6 +11,7 @@ The concrete agent definitions live in `.codex/agents/`.
 - embed design and UX in delivery, not as a downstream service
 - keep QA, release, App Store, analytics, and safety as named owners
 - make the main Codex agent the integration lead, not the only specialist
+- make behavior-focused testing the default engineering execution model
 - keep DeskWellness inside a non-regulated general-wellness product lane by default
 
 ## Organization model
@@ -21,6 +22,26 @@ DeskWellness should run as:
 - a standing role-agent team
 - departments that provide standards, ownership, and review accountability
 - ticket execution delegated across the standing role agents
+
+## Engineering execution standard
+
+DeskWellness engineering work should default to behavior-focused testing.
+
+Execution rules:
+
+- test what the code does, not how it is internally structured
+- prefer the Testing Trophy order of investment:
+  integration tests first, unit tests for pure logic, a few critical end-to-end flows, and static analysis as a constant safety net
+- use integration tests as the default for most feature work and user-facing regressions
+- use unit tests where they are strongest:
+  algorithms, state machines, parsers, business rules, and other complex logic
+- avoid low-value tests for glue code, trivial accessors, and layout-only UI details unless they cover a real risk
+- write tests alongside code by default; use strict TDD when it helps, but do not force it when it does not improve delivery
+- lean on Swift types, static analysis, and previews to remove low-value runtime tests where possible
+- prefer testing view models, repositories, and app boundaries over direct SwiftUI view-structure tests
+- use a small number of critical end-to-end or UI flows instead of trying to exhaustively automate the full UI surface
+- use snapshot or golden tests when stable UI output or serialization shape matters more than implementation details
+- treat tests as shared delivery ownership across Architecture, iOS Engineering, Data/Reliability, and QA
 
 ## Product boundary
 
@@ -154,6 +175,7 @@ Primary ownership:
 - posture scan UX implementation
 - cross-feature code review
 - engineering patterns and performance tradeoffs
+- behavior-focused test strategy across implementation work
 
 ### 6. Core iOS Developer Agent
 
@@ -165,6 +187,7 @@ Primary ownership:
 - `DeskWellness/PostureTipView.swift`
 - `DeskWellness/JournalView.swift`
 - visual user flow implementation
+- high-value regression coverage with QA coordination
 
 ### 7. Data and Reliability Engineer Agent
 
@@ -176,6 +199,7 @@ Primary ownership:
 - `DeskWellness/JournalView.swift`
 - photo persistence and cleanup paths
 - future SwiftData migration paths
+- persistence-focused integration coverage and logic-level tests where they pay off
 
 ### 8. Monetization Engineer Agent
 
@@ -239,6 +263,7 @@ Primary ownership:
 - future `DeskWellnessTests/`
 - future `DeskWellnessUITests/`
 - build verification and release test requirements
+- regression proof through the highest-value mix of integration, unit, and critical end-to-end tests
 
 ### 14. Release Engineer Agent
 

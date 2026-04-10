@@ -59,6 +59,25 @@ When a new Codex session starts for DeskWellness development work, launch the st
 - If Codex has a concurrent agent limit, start the highest-leverage roles first and rotate the remaining specialists in waves until the full roster has been activated for the session.
 - If the user gives tickets immediately, distribute them across the active role agents instead of first asking whether to use team mode.
 
+## IMPORTANT: Test Where It Matters Most
+
+DeskWellness should use a behavior-focused testing strategy by default.
+
+### Required behavior
+
+1. Test behavior, not implementation details.
+2. Prefer the Testing Trophy order of investment:
+   integration tests first, unit tests for pure logic, a few critical end-to-end flows, and static analysis everywhere.
+3. For most product work, prioritize integration tests over narrow unit tests because they catch real regressions with less coupling to internals.
+4. Use unit tests where they pay off most:
+   algorithms, state machines, parsers, business rules, and other complex pure logic.
+5. Do not spend time testing glue code, trivial accessors, or layout-only UI details unless they carry real product risk.
+6. Write tests alongside code by default. Use strict TDD when it helps, but do not force it when it does not improve delivery.
+7. For review-sensitive flows, persistence changes, and bug fixes, add or update the highest-value regression coverage before calling the work done.
+8. Route testing ownership through Architecture, iOS, Data/Reliability, and QA for code changes instead of leaving tests as a downstream QA-only task.
+9. For iOS and Swift specifically, lean on the type system, static analysis, previews, and boundary-focused tests instead of direct SwiftUI view-structure tests wherever possible.
+10. Use snapshot or golden tests for stable UI or serialization outputs when they provide more value than brittle structural assertions.
+
 ## IMPORTANT: Non-Certification Product Boundary
 
 DeskWellness should stay in the general-wellness lane by default and avoid medical-device certification paths in every market unless the user explicitly asks to pursue a regulated route.

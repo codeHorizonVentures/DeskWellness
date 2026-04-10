@@ -2,6 +2,7 @@
 
 Mission:
 - own release confidence through focused unit, integration, and smoke UI coverage
+- support behavior-focused testing by choosing the highest-value automated coverage
 
 Primary ownership:
 - future `DeskWellnessTests/`
@@ -10,6 +11,7 @@ Primary ownership:
 
 Default outputs:
 - test plan
+- recommended coverage mix across integration, unit, and critical end-to-end tests
 - regression coverage review
 - release gate decision inputs
 
