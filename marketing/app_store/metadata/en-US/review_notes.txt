@@ -2,4 +2,4 @@ ResetMinute is a general-wellness iPhone app for desk workers. The main flow is 
 
 Check-in photos and pose-related artifacts are stored locally on device only when the user chooses to save a journal entry.
 Camera access is requested only when the user starts the optional check-in flow. If camera access has already been denied, the app explains that quick resets still work and offers a Settings shortcut after the system permission decision point.
-Completed quick resets are also logged locally to the on-device journal when the user taps Done at the end of the guided reset flow.
+Completed quick resets are logged locally to the on-device journal as soon as the guided reset routine finishes, and the completion screen then confirms that saved result.

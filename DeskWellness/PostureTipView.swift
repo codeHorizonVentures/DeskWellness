@@ -67,6 +67,7 @@ struct PostureTipView: View {
     @State private var timerActive = false
     @State private var showCompletion = false
     @State private var hasLoggedCompletion = false
+    @State private var showCompletionSaveErrorAlert = false
     
     let tips = PostureTipsData.deskReset
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -88,21 +89,16 @@ struct PostureTipView: View {
                             .foregroundColor(.white.opacity(0.7))
                     }
                     Spacer()
-                    if showCompletion {
-                        Color.clear
-                            .frame(width: 24, height: 24)
-                    } else {
-                        Button(action: { presentationMode.wrappedValue.dismiss() }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(.gray)
-                        }
+                    Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(.gray)
                     }
                 }
                 .padding()
                 
                 if showCompletion {
-                    CompletionView(onDismiss: completeResetAndDismiss)
+                    CompletionView(onDismiss: dismissCompletion)
                 } else {
                     // Progress Bar
                     ProgressBar(current: currentIndex + 1, total: tips.count)
@@ -135,7 +131,16 @@ struct PostureTipView: View {
                 nextExercise()
             }
         }
-        .interactiveDismissDisabled(showCompletion && !hasLoggedCompletion)
+        .alert("Couldn't Save Reset", isPresented: $showCompletionSaveErrorAlert) {
+            Button("Try Again") {
+                finishReset()
+            }
+            Button("Close", role: .cancel) {
+                presentationMode.wrappedValue.dismiss()
+            }
+        } message: {
+            Text("Your reset finished, but it could not be added to the journal. Please try again.")
+        }
     }
     
     private func nextExercise() {
@@ -146,23 +151,39 @@ struct PostureTipView: View {
                 timerActive = true
             }
         } else {
-            withAnimation {
-                showCompletion = true
-                timerActive = false
-            }
+            finishReset()
         }
     }
 
-    private func logCompletedResetIfNeeded() {
-        guard !hasLoggedCompletion else { return }
+    private func finishReset() {
+        timerActive = false
 
-        modelContext.insert(DailyEntry.completedQuickResetEntry())
-        try? modelContext.save()
-        hasLoggedCompletion = true
+        do {
+            try logCompletedResetIfNeeded()
+            withAnimation {
+                showCompletion = true
+            }
+        } catch {
+            showCompletionSaveErrorAlert = true
+        }
     }
 
-    private func completeResetAndDismiss() {
-        logCompletedResetIfNeeded()
+    private func logCompletedResetIfNeeded() throws {
+        guard !hasLoggedCompletion else { return }
+
+        let entry = DailyEntry.completedQuickResetEntry()
+        modelContext.insert(entry)
+
+        do {
+            try modelContext.save()
+            hasLoggedCompletion = true
+        } catch {
+            modelContext.delete(entry)
+            throw error
+        }
+    }
+
+    private func dismissCompletion() {
         presentationMode.wrappedValue.dismiss()
     }
 }
@@ -298,7 +319,7 @@ struct CompletionView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
-                Text("Tap Done to add this reset to your journal.")
+                Text("This reset was added to your journal.")
                     .font(.subheadline)
                     .foregroundColor(.green.opacity(0.9))
                     .multilineTextAlignment(.center)

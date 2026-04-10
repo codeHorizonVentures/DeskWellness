@@ -75,4 +75,23 @@ final class DeskWellnessSmokeUITests: XCTestCase {
         XCTAssertTrue(alert.buttons["Not Now"].exists)
         XCTAssertTrue(alert.buttons["Open Settings"].exists)
     }
+
+    @MainActor
+    func testOptionalCheckInShowsRecoveryActionsAfterFirstRequestDenial() {
+        let app = XCUIApplication()
+        app.launchArguments += [
+            "-ResetMinuteSkipOnboarding",
+            "-ResetMinuteSimulateCameraRequestDenied"
+        ]
+        app.launch()
+
+        let optionalCheckIn = app.buttons["home_optional_check_in"]
+        XCTAssertTrue(optionalCheckIn.waitForExistence(timeout: timeout))
+        optionalCheckIn.tap()
+
+        let alert = app.alerts["Camera Access Required"]
+        XCTAssertTrue(alert.waitForExistence(timeout: timeout))
+        XCTAssertTrue(alert.buttons["Not Now"].exists)
+        XCTAssertTrue(alert.buttons["Open Settings"].exists)
+    }
 }

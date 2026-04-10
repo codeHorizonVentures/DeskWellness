@@ -74,7 +74,9 @@ struct ContentView: View {
     @State private var lastSpeechTime: Date = .distantPast
     @State private var showJournal = false
     @State private var showCameraPermissionAlert = false
+    @State private var showJournalSaveErrorAlert = false
     @State private var cameraPermissionAlertMode: CameraPermissionAlertMode = .restricted
+    @State private var journalSaveErrorMessage = ""
     @State private var frontScore: FrontScore? = nil
     @State private var showPostureTips = false
     @State private var frontSnapshot: UIImage?
@@ -260,6 +262,13 @@ struct ContentView: View {
         } message: {
             Text(cameraPermissionAlertMode.message)
         }
+        .alert("Couldn't Save Journal Entry", isPresented: $showJournalSaveErrorAlert) {
+            Button("OK", role: .cancel) {
+                journalSaveErrorMessage = ""
+            }
+        } message: {
+            Text(journalSaveErrorMessage)
+        }
         .sheet(isPresented: $showPostureTips) {
             PostureTipView()
         }
@@ -327,7 +336,11 @@ struct ContentView: View {
             modelContext.delete(entry)
         }
 
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            assertionFailure("Failed to clear UI test entries: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Camera Permission
@@ -338,29 +351,16 @@ struct ContentView: View {
             return
         }
 
+        if launchArguments.contains("-ResetMinuteSimulateCameraRequestDenied") {
+            handleCameraAccessRequestResult(granted: false)
+            return
+        }
+
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
-            scanDuration = 0
-            frontScore = nil
-            engine.start()
-            withAnimation {
-                appState = .frontScanning
-            }
+            startCheckIn()
         case .notDetermined:
-            AVCaptureDevice.requestAccess(for: .video) { granted in
-                DispatchQueue.main.async {
-                    if granted {
-                        scanDuration = 0
-                        frontScore = nil
-                        engine.start()
-                        withAnimation {
-                            appState = .frontScanning
-                        }
-                    } else {
-                        presentCameraPermissionAlert(for: .denied)
-                    }
-                }
-            }
+            requestCameraAccess()
         case .denied:
             presentCameraPermissionAlert(for: .denied)
         case .restricted:
@@ -381,9 +381,40 @@ struct ContentView: View {
         }
     }
 
+    private func startCheckIn() {
+        scanDuration = 0
+        frontScore = nil
+        engine.start()
+        withAnimation {
+            appState = .frontScanning
+        }
+    }
+
+    private func requestCameraAccess() {
+        AVCaptureDevice.requestAccess(for: .video) { granted in
+            handleCameraAccessRequestResult(granted: granted)
+        }
+    }
+
+    private func handleCameraAccessRequestResult(granted: Bool) {
+        DispatchQueue.main.async {
+            if granted {
+                startCheckIn()
+            } else {
+                presentCameraPermissionAlert(for: .denied)
+            }
+        }
+    }
+
     private func persist(_ entry: DailyEntry) {
         modelContext.insert(entry)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.delete(entry)
+            journalSaveErrorMessage = "This check-in couldn't be saved to your journal. Please try again."
+            showJournalSaveErrorAlert = true
+        }
     }
 
     private func presentCameraPermissionAlert(for mode: CameraPermissionAlertMode) {
