@@ -49,6 +49,7 @@ Do not treat the package as submission-ready unless all of these are aligned:
 - metadata in `metadata/en-US/`
 - live support/privacy URLs
 - app copy stays inside the no-certification general-wellness boundary
+- regulated medical device status is declared as `No` in App Store Connect for the current app
 
 ## Release commands
 

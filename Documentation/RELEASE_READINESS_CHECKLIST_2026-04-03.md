@@ -108,6 +108,7 @@ Before the first App Store submission, confirm:
 - screenshots show desk resets, not clinical posture diagnosis
 - description and keywords stay inside the general-wellness boundary
 - privacy answers in App Store Connect match the real app behavior
+- regulated medical device status is declared as `No` for the current wellness-only app
 - support and privacy URLs are live if they are supplied
 
 Do not submit with:

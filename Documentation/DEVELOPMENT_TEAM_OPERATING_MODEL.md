@@ -9,7 +9,7 @@ The concrete agent definitions live in `.codex/agents/`.
 - keep product delivery cross-functional
 - keep desk-worker habit value, privacy review, and claim safety explicit
 - embed design and UX in delivery, not as a downstream service
-- keep QA, release, App Store, analytics, and safety as named owners
+- keep QA, release, App Store, analytics, safety, and legal review as named owners
 - make the main Codex agent the integration lead, not the only specialist
 - make behavior-focused testing the default engineering execution model
 - keep DeskWellness inside a non-regulated general-wellness product lane by default
@@ -112,6 +112,14 @@ Owns camera permission accuracy, local-processing claims, data retention review,
 Roles:
 
 - Security and Privacy Engineer
+
+### Legal and Regulatory Department
+
+Owns regulated-status interpretation, App Store permit declarations, content-rights review support, and release-facing legal consistency for a non-medical wellness product.
+
+Roles:
+
+- Legal Counsel
 
 ### Analytics and Growth Department
 
@@ -286,7 +294,18 @@ Primary ownership:
 - privacy policy alignment
 - wellness-safety product boundary review
 
-### 16. Analytics and Growth Analyst Agent
+### 16. Legal Counsel Agent
+
+Purpose:
+- owns regulatory interpretation, App Store compliance declarations, and legal-risk review for public product claims
+
+Primary ownership:
+- regulated medical device declaration guidance
+- App Store regulatory and permit review
+- wellness-boundary legal review for metadata and marketing surfaces
+- content-rights review support
+
+### 17. Analytics and Growth Analyst Agent
 
 Purpose:
 - owns event schema quality, activation measurement, and retention-oriented experimentation
@@ -297,7 +316,7 @@ Primary ownership:
 - journal retention metrics
 - post-MVP growth instrumentation
 
-### 17. App Store and ASO Manager Agent
+### 18. App Store and ASO Manager Agent
 
 Purpose:
 - owns App Store positioning quality, metadata, screenshots, and market-facing release materials
@@ -330,6 +349,7 @@ Use this wave once the core wave has context or when the ticket touches these ar
 - UX Researcher
 - UX Writer
 - Analytics and Growth Analyst
+- Legal Counsel
 
 ### Market and scale wave
 
@@ -346,5 +366,6 @@ Use this wave when the work is release-facing, monetization-facing, or App Store
 - coaching and exercise content: Product Lead, Product Designer, UX Researcher, UX Writer, Core iOS Developer
 - journaling and persistence: Mobile Architect, Data and Reliability Engineer, Core iOS Developer, QA Automation Lead
 - paywall and subscription work: Monetization Engineer, Product Lead, UX Writer, QA Automation Lead, App Store and ASO Manager
-- release work: Release Engineer, QA Automation Lead, Security and Privacy Engineer, App Store and ASO Manager
+- release work: Release Engineer, QA Automation Lead, Security and Privacy Engineer, Legal Counsel, App Store and ASO Manager
+- regulatory, policy, and market-claim work: Product Lead, Security and Privacy Engineer, Legal Counsel, UX Writer, App Store and ASO Manager
 - growth work: Analytics and Growth Analyst, Product Lead, UX Researcher, App Store and ASO Manager

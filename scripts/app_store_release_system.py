@@ -827,6 +827,7 @@ def build_release_report(args: argparse.Namespace) -> dict[str, Any]:
         "manualBlockers": blockers,
         "manualSteps": [
             "Complete the App Privacy answers in App Store Connect so they match the current local-first camera and reminder behavior.",
+            "Declare Regulated Medical Device status as 'No' in App Store Connect for the current general-wellness release unless the app has actually become a regulated device in any region.",
             "Set Content Rights Information in App Store Connect so it matches the final bundled assets and their ownership.",
             "Choose the final App Store price tier in App Store Connect if it has not already been saved.",
             "Run and record the real-device release checklist before submitting the first version.",

@@ -126,6 +126,25 @@ Reason:
 - Apple’s current age-rating definitions place health and wellness topics in the `9+` tier
 - ResetMinute is a general-wellness app with exercise and self-care guidance, but it is not a medical or treatment app
 
+## Regulated medical device declaration
+
+Because the app is in the `Health & Fitness` category, Apple now requires a regulated medical device declaration for EU/EEA, UK, and US distribution.
+
+For the current MVP:
+
+- declaration: `No`
+
+Reason:
+
+- ResetMinute is intentionally positioned as a general-wellness app, not a diagnostic, treatment, prevention, or clinically regulated medical product
+- the repo source of truth is `Documentation/NO_CERTIFICATION_PRODUCT_BOUNDARY_2026-04-02.md`
+
+App Store Connect path:
+
+- `Apps > <ResetMinute> > General > App Information > App Store Regulations & Permits > Declare Regulated Medical Device`
+
+Only choose `Yes` if the shipped app later becomes a regulated medical device in one or more countries or regions and the required regulatory information is ready for publication.
+
 ## Content Rights
 
 Use:

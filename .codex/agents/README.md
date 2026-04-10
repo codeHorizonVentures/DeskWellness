@@ -21,6 +21,7 @@ The main Codex agent remains the integration lead. These files define the specia
 - `ux-researcher.md`
 - `ux-writer.md`
 - `analytics-growth-analyst.md`
+- `legal-counsel.md`
 
 ## Market and scale wave
 

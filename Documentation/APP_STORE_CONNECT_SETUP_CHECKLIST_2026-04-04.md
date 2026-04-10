@@ -127,6 +127,20 @@ Important reviewer clarification:
 - optional posture check-ins are secondary
 - the app is not intended to diagnose, treat, or prevent any medical condition
 
+## Regulated medical device declaration
+
+Because the app is distributed in `Health & Fitness`, declare the app’s regulated medical device status in App Store Connect before submission.
+
+For the current MVP:
+
+- select `No`
+
+Use:
+
+- `Apps > <ResetMinute> > General > App Information > App Store Regulations & Permits > Declare Regulated Medical Device`
+
+Re-evaluate this only if the app later becomes FDA-cleared, FDA-registered as a medical device, CE-marked, UKCA-marked, or otherwise self-certified as a regulated medical device in a supported region.
+
 ## Still required outside App Store Connect
 
 These are still blockers even after the ASC record exists:
@@ -153,6 +167,7 @@ These are still blockers even after the ASC record exists:
 2. sync the existing app record metadata with `python3 scripts/app_store_release_system.py sync-metadata`
 3. sync the app record fields with `python3 scripts/app_store_release_system.py sync-app-record --contact-phone '<real monitored phone>'`
 4. upload the approved screenshot set with `python3 scripts/app_store_release_system.py sync-iphone-screenshots`
-5. run the real-device release checklist
-6. archive and upload the signed build that matches the selected App Store version
-7. attach the build and complete submission metadata
+5. declare regulated medical device status as `No`
+6. run the real-device release checklist
+7. archive and upload the signed build that matches the selected App Store version
+8. attach the build and complete submission metadata

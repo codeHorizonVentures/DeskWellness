@@ -22,7 +22,7 @@ use a documented release workflow by default.
 1. Propose a short execution plan first.
 2. Use the repo release workflow if it exists.
 3. If DeskWellness does not yet have a deterministic release system, create or update the release workflow docs before claiming release readiness.
-4. Treat build verification, privacy review, App Store metadata accuracy, and test coverage as the minimum release gate.
+4. Treat build verification, privacy review, App Store metadata accuracy, regulatory declaration accuracy, and test coverage as the minimum release gate.
 
 ### Do not do this by default
 
@@ -41,15 +41,15 @@ When a new Codex session starts for DeskWellness development work, launch the st
 3. Use the operating model in `Documentation/DEVELOPMENT_TEAM_OPERATING_MODEL.md` and the role files in `.codex/agents/` as the source of truth for departments, roles, startup waves, and ownership.
 4. Assign tickets and research tasks through the standing team instead of working as a single generalist by default.
 5. Route ticket ownership to the correct departments:
-   - scan and posture logic through Product, iOS, Privacy/Safety, and QA
+   - scan and posture logic through Product, iOS, Privacy/Safety, Legal/Regulatory, and QA
    - persistence and journaling changes through Architecture, Data/Reliability, and QA
    - coaching and exercise flows through Product, Design, UX Research, and UX Writing
    - monetization changes through Monetization, App Store, QA, and Product once subscriptions are real
-   - release work through Release, App Store, QA, and Security/Privacy
+   - release work through Release, App Store, QA, Security/Privacy, and Legal/Regulatory
 6. Keep validation attached to execution:
    - logic changes must be covered by tests
    - privacy-sensitive changes must include disclosure review
-   - release-facing changes must include build and App Store checks
+   - release-facing changes must include build, App Store, and regulatory declaration checks
 7. Only skip the standing team when the user explicitly narrows the scope or asks not to run sub-agents.
 
 ### Standing team startup rule
