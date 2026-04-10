@@ -33,6 +33,7 @@ enum CameraPermissionAlertMode {
 
 enum AppState {
     case home
+    case checkInSetup
     case frontScanning              // Phase 1: Front-facing detection
     case frontResult(FrontScore)    // Show front results, prompt for side if needed
     case sideScanning               // Phase 2: Side profile detection (optional)
@@ -61,6 +62,74 @@ struct FinalScore {
     let combinedScore: Int
 }
 
+enum FrontCheckInPhase: Equatable {
+    case detecting
+    case aligned
+    case holding
+    case timeout
+}
+
+struct FrontCheckInPresentation: Equatable {
+    let phase: FrontCheckInPhase
+    let title: String
+    let detail: String
+    let chipText: String
+    let progress: Double?
+    let secondsRemaining: Int?
+
+    static func make(
+        isLocked: Bool,
+        heldSeconds: Double,
+        holdDuration: Double,
+        timedOut: Bool
+    ) -> FrontCheckInPresentation {
+        if timedOut {
+            return FrontCheckInPresentation(
+                phase: .timeout,
+                title: "Could not lock this time",
+                detail: "Set your phone down, step back, and try again. Or skip to Quick Reset.",
+                chipText: "TRY AGAIN",
+                progress: nil,
+                secondsRemaining: nil
+            )
+        }
+
+        guard isLocked else {
+            return FrontCheckInPresentation(
+                phase: .detecting,
+                title: "Set your phone down and step back",
+                detail: "We need your head and shoulders in view. Do not hold the phone.",
+                chipText: "GET READY",
+                progress: nil,
+                secondsRemaining: nil
+            )
+        }
+
+        if heldSeconds <= 0 {
+            return FrontCheckInPresentation(
+                phase: .aligned,
+                title: "Aligned",
+                detail: "Hold still to finish.",
+                chipText: "ALIGNED",
+                progress: 0,
+                secondsRemaining: Int(holdDuration)
+            )
+        }
+
+        let boundedProgress = min(max(heldSeconds / holdDuration, 0), 1)
+        let remaining = max(1, Int(ceil(holdDuration - heldSeconds)))
+
+        return FrontCheckInPresentation(
+            phase: .holding,
+            title: "Hold still",
+            detail: "Keep it set down while we finish.",
+            chipText: "HOLD \(remaining)S",
+            progress: boundedProgress,
+            secondsRemaining: remaining
+        )
+    }
+}
+
 // MARK: - Main Content View
 
 struct ContentView: View {
@@ -79,6 +148,8 @@ struct ContentView: View {
     @State private var journalSaveErrorMessage = ""
     @State private var frontScore: FrontScore? = nil
     @State private var showPostureTips = false
+    @State private var frontScanAttemptDuration: Double = 0
+    @State private var frontScanTimedOut = false
     @State private var frontSnapshot: UIImage?
     @State private var sideSnapshot: UIImage?
     @State private var showOnboarding = false
@@ -144,6 +215,7 @@ struct ContentView: View {
                 TopBarView(
                     appState: appState,
                     engine: engine,
+                    frontCheckInPresentation: activeFrontCheckInPresentation,
                     shouldAutoOpenReminderSettings: launchArguments.contains("-ResetMinuteOpenReminderSettings")
                 )
 
@@ -155,15 +227,29 @@ struct ContentView: View {
                     HomeView(
                         consistencySummary: consistencySummary,
                         onStartQuickReset: { showPostureTips = true },
-                        onStartCheckIn: { beginCheckInFlow() },
+                        onStartCheckIn: { showCheckInSetup() },
                         onOpenJournal: { showJournal = true }
+                    )
+
+                case .checkInSetup:
+                    CheckInSetupView(
+                        onContinue: { beginCheckInFlow() },
+                        onStartReset: {
+                            resetToHome()
+                            showPostureTips = true
+                        },
+                        onSkip: { resetToHome() }
                     )
 
                 case .frontScanning:
                     FrontScanningView(
+                        presentation: frontCheckInPresentation,
                         shoulderTilt: engine.shoulderTilt,
                         headTilt: engine.headTilt,
-                        isLocked: engine.isFrontLocked
+                        isLocked: engine.isFrontLocked,
+                        onRetry: { retryFrontScan() },
+                        onStartReset: { startQuickResetFromCheckIn() },
+                        onSkip: { resetToHome() }
                     )
                     
                 case .frontResult(let score):
@@ -304,6 +390,23 @@ struct ContentView: View {
         return nil
     }
 
+    private var frontCheckInPresentation: FrontCheckInPresentation {
+        FrontCheckInPresentation.make(
+            isLocked: engine.isFrontLocked,
+            heldSeconds: scanDuration,
+            holdDuration: PostureConstants.scanLockDuration,
+            timedOut: frontScanTimedOut
+        )
+    }
+
+    private var activeFrontCheckInPresentation: FrontCheckInPresentation? {
+        if case .frontScanning = appState {
+            return frontCheckInPresentation
+        }
+
+        return nil
+    }
+
     private func decideOnboardingPresentationIfNeeded() {
         guard !decidedOnboardingForThisLaunch else { return }
         decidedOnboardingForThisLaunch = true
@@ -345,6 +448,19 @@ struct ContentView: View {
 
     // MARK: - Camera Permission
 
+    private func showCheckInSetup() {
+        engine.reset()
+        scanDuration = 0
+        frontScanAttemptDuration = 0
+        frontScanTimedOut = false
+        frontScore = nil
+        frontSnapshot = nil
+        sideSnapshot = nil
+        withAnimation {
+            appState = .checkInSetup
+        }
+    }
+
     private func beginCheckInFlow() {
         if launchArguments.contains("-ResetMinuteSimulateCameraDenied") {
             presentCameraPermissionAlert(for: .denied)
@@ -373,6 +489,8 @@ struct ContentView: View {
     private func resetToHome() {
         engine.reset()
         scanDuration = 0
+        frontScanAttemptDuration = 0
+        frontScanTimedOut = false
         frontScore = nil
         frontSnapshot = nil
         sideSnapshot = nil
@@ -383,11 +501,24 @@ struct ContentView: View {
 
     private func startCheckIn() {
         scanDuration = 0
+        frontScanAttemptDuration = 0
+        frontScanTimedOut = false
         frontScore = nil
         engine.start()
         withAnimation {
             appState = .frontScanning
         }
+    }
+
+    private func retryFrontScan() {
+        engine.stop()
+        engine.reset()
+        startCheckIn()
+    }
+
+    private func startQuickResetFromCheckIn() {
+        resetToHome()
+        showPostureTips = true
     }
 
     private func requestCameraAccess() {
@@ -453,6 +584,19 @@ struct ContentView: View {
     }
     
     private func handleFrontScan() {
+        guard !frontScanTimedOut else { return }
+
+        frontScanAttemptDuration += 1
+
+        if frontScanAttemptDuration >= PostureConstants.frontScanTimeoutDuration {
+            frontScanTimedOut = true
+            scanDuration = 0
+            engine.stop()
+            engine.switchToFrontMode()
+            speakDebounced("Could not get a clear check-in. Try again or start a quick reset.")
+            return
+        }
+
         if engine.isFrontLocked {
             scanDuration += 1
             
@@ -463,6 +607,8 @@ struct ContentView: View {
             if scanDuration >= PostureConstants.scanLockDuration {
                 finishFrontScan()
             }
+        } else if scanDuration > 0 {
+            scanDuration = 0
         }
     }
     
@@ -546,6 +692,7 @@ struct ContentView: View {
 struct TopBarView: View {
     let appState: AppState
     let engine: PostureEngine
+    let frontCheckInPresentation: FrontCheckInPresentation?
     let shouldAutoOpenReminderSettings: Bool
     @AppStorage(ReminderScheduler.enabledKey) private var remindersEnabled = false
     @State private var showReminderSettings = false
@@ -594,9 +741,9 @@ struct TopBarView: View {
     private var statusText: String {
         switch appState {
         case .frontScanning:
-            return engine.isFrontLocked ? "LOCKED" : "SCANNING..."
+            return frontCheckInPresentation?.chipText ?? "CHECK-IN"
         case .sideScanning:
-            return engine.isSideLocked ? "LOCKED" : "TURN SIDEWAYS"
+            return engine.isSideLocked ? "HOLD STILL" : "TURN SIDEWAYS"
         default:
             return ""
         }
@@ -605,7 +752,18 @@ struct TopBarView: View {
     private var statusColor: Color {
         switch appState {
         case .frontScanning:
-            return engine.isFrontLocked ? .green : .gray
+            guard let frontCheckInPresentation else { return .gray }
+
+            switch frontCheckInPresentation.phase {
+            case .detecting:
+                return .gray
+            case .aligned:
+                return .cyan
+            case .holding:
+                return .green
+            case .timeout:
+                return .orange
+            }
         case .sideScanning:
             return engine.isSideLocked ? .green : .orange
         default:
@@ -756,18 +914,361 @@ private struct HomeWeeklyMetric: View {
     }
 }
 
+struct CheckInSetupView: View {
+    let onContinue: () -> Void
+    let onStartReset: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 18) {
+                VStack(spacing: 10) {
+                    Text("Optional Check-In")
+                        .font(.caption.weight(.semibold))
+                        .textCase(.uppercase)
+                        .foregroundColor(.cyan.opacity(0.9))
+
+                    Text("Set your phone down first")
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.82)
+
+                    Text("Place your phone on a desk or stand.\nThen step back until your head and shoulders fit in view.")
+                        .font(.callout)
+                        .foregroundColor(.white.opacity(0.84))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                .padding(.horizontal, 28)
+
+                CheckInSetupAnimationView()
+                    .frame(height: 190)
+                    .padding(.horizontal, 24)
+
+                VStack(spacing: 12) {
+                    SetupStepRow(
+                        icon: "iphone.gen3",
+                        title: "Place the phone down",
+                        detail: "Lean it on your monitor or use a stand.\nDo not hold it."
+                    )
+                    SetupStepRow(
+                        icon: "figure.stand",
+                        title: "Step back into view",
+                        detail: "Step back until your head and shoulders fit in view."
+                    )
+                    SetupStepRow(
+                        icon: "lock.open",
+                        title: "Camera stays on device",
+                        detail: "It runs on your device.\nIt saves locally only if you save it."
+                    )
+                }
+                .padding(.horizontal, 24)
+
+                VStack(spacing: 12) {
+                    Button(action: onContinue) {
+                        Text("Continue")
+                            .font(.headline)
+                            .foregroundColor(.black)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.9)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.cyan)
+                            .cornerRadius(16)
+                    }
+                    .accessibilityIdentifier("checkin_setup_continue")
+
+                    Button(action: onStartReset) {
+                        Text("Start Reset")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.9)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.white.opacity(0.14))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                            )
+                            .cornerRadius(16)
+                    }
+                    .accessibilityIdentifier("checkin_setup_start_reset")
+
+                    Button(action: onSkip) {
+                        Text("Skip")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.white.opacity(0.78))
+                            .lineLimit(1)
+                    }
+                    .accessibilityIdentifier("checkin_setup_skip")
+                }
+                .padding(.horizontal, 24)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 32)
+            .padding(.bottom, 24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier("checkin_setup_screen")
+    }
+}
+
+private struct SetupStepRow: View {
+    let icon: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(.cyan)
+                .frame(width: 28, height: 28)
+                .padding(10)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.86)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundColor(.white.opacity(0.72))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(Color.white.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+}
+
+struct CheckInSetupAnimationView: View {
+    @State private var isPlaced = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            let size = geometry.size
+            let deskY = size.height * 0.79
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 28)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.1),
+                                Color.white.opacity(0.04)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 28)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color.white.opacity(0.14))
+                    .frame(width: size.width * 0.82, height: 6)
+                    .offset(y: deskY - size.height / 2)
+
+                VStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.black.opacity(0.26))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        )
+                        .frame(width: size.width * 0.26, height: size.height * 0.34)
+
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.white.opacity(0.18))
+                        .frame(width: 16, height: size.height * 0.12)
+
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.white.opacity(0.12))
+                        .frame(width: size.width * 0.18, height: 8)
+                }
+                .offset(x: -size.width * 0.16, y: -size.height * 0.06)
+
+                SetupPersonSilhouette()
+                    .stroke(Color.white.opacity(isPlaced ? 0.55 : 0.24), lineWidth: 4)
+                    .frame(width: size.width * 0.24, height: size.height * 0.42)
+                    .scaleEffect(isPlaced ? 1.0 : 0.9)
+                    .opacity(isPlaced ? 1.0 : 0.5)
+                    .offset(x: size.width * 0.24, y: -size.height * 0.02)
+
+                SetupPhoneView()
+                    .frame(width: size.width * 0.16, height: size.height * 0.32)
+                    .rotationEffect(.degrees(isPlaced ? -16 : 10))
+                    .offset(
+                        x: isPlaced ? -size.width * 0.03 : size.width * 0.28,
+                        y: isPlaced ? size.height * 0.02 : size.height * 0.24
+                    )
+                    .shadow(color: .black.opacity(0.28), radius: 10, x: 0, y: 8)
+
+                Image(systemName: "hand.point.up.left.fill")
+                    .font(.system(size: size.width * 0.12))
+                    .foregroundColor(.cyan.opacity(0.9))
+                    .opacity(isPlaced ? 0 : 0.92)
+                    .offset(x: size.width * 0.18, y: size.height * 0.24)
+
+                VStack(spacing: 10) {
+                    Text(isPlaced ? "Phone placed" : "Set the phone down")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.9)
+
+                    Text(isPlaced ? "Step back into view" : "Use a desk or monitor")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.74))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 12)
+                .frame(maxWidth: size.width * 0.76)
+                .background(Color.black.opacity(0.24))
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .offset(y: -size.height * 0.34)
+            }
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                isPlaced = true
+            }
+        }
+    }
+}
+
+private struct SetupPhoneView: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 18)
+            .fill(Color.black.opacity(0.42))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+            )
+            .overlay(alignment: .top) {
+                Capsule()
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: 26, height: 5)
+                    .padding(.top, 8)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.cyan.opacity(0.24), lineWidth: 1)
+                    .padding(6)
+            }
+    }
+}
+
+private struct SetupPersonSilhouette: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let headSize = min(rect.width * 0.38, rect.height * 0.26)
+        let headOrigin = CGPoint(x: rect.midX - headSize / 2, y: rect.minY + rect.height * 0.02)
+
+        path.addEllipse(in: CGRect(origin: headOrigin, size: CGSize(width: headSize, height: headSize)))
+
+        let shoulderY = headOrigin.y + headSize + rect.height * 0.1
+        path.move(to: CGPoint(x: rect.midX - rect.width * 0.38, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.midX, y: shoulderY),
+            control: CGPoint(x: rect.midX - rect.width * 0.26, y: rect.maxY - rect.height * 0.18)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: rect.midX + rect.width * 0.38, y: rect.maxY),
+            control: CGPoint(x: rect.midX + rect.width * 0.26, y: rect.maxY - rect.height * 0.18)
+        )
+
+        return path
+    }
+}
+
+#Preview("Check-In Setup") {
+    ZStack {
+        LinearGradient(
+            colors: [Color.black, Color.gray.opacity(0.85)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+
+        CheckInSetupView(
+            onContinue: {},
+            onStartReset: {},
+            onSkip: {}
+        )
+    }
+}
+
 // MARK: - Front Scanning View
 
 struct FrontScanningView: View {
+    let presentation: FrontCheckInPresentation
     let shoulderTilt: Double
     let headTilt: Double
     let isLocked: Bool
+    let onRetry: () -> Void
+    let onStartReset: () -> Void
+    let onSkip: () -> Void
 
     var body: some View {
         VStack(spacing: 16) {
-            if isLocked {
-                // Show live metrics
+            VStack(spacing: 16) {
+                Image(systemName: headerIcon)
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundColor(headerColor)
+
                 VStack(spacing: 8) {
+                    Text(presentation.title)
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.82)
+
+                    Text(presentation.detail)
+                        .font(.callout)
+                        .foregroundColor(.white.opacity(0.88))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let progress = presentation.progress {
+                    VStack(spacing: 8) {
+                        ProgressView(value: progress)
+                            .tint(headerColor)
+
+                        if let secondsRemaining = presentation.secondsRemaining {
+                            Text("\(secondsRemaining)s remaining")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundColor(.white.opacity(0.82))
+                        }
+                    }
+                }
+
+                if presentation.phase == .holding {
                     HStack(spacing: 30) {
                         MetricView(
                             label: "SHOULDERS",
@@ -782,21 +1283,94 @@ struct FrontScanningView: View {
                             isGood: abs(headTilt) < 3
                         )
                     }
-                    
-                    Text("Hold still...")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
                 }
-                .padding(24)
-                .background(RoundedRectangle(cornerRadius: 20).fill(Color.black.opacity(0.6)))
-                .transition(.scale)
+            }
+            .padding(24)
+            .background(RoundedRectangle(cornerRadius: 24).fill(Color.black.opacity(0.58)))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24)
+                    .stroke(headerColor.opacity(0.25), lineWidth: 1)
+            )
+            .padding(.horizontal, 24)
+
+            if presentation.phase == .timeout {
+                VStack(spacing: 12) {
+                    Button(action: onRetry) {
+                        Text("Try Again")
+                            .font(.headline)
+                            .foregroundColor(.black)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.white)
+                            .cornerRadius(16)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                    }
+
+                    Button(action: onStartReset) {
+                        Text("Start Reset")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.9)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.white.opacity(0.14))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                            )
+                            .cornerRadius(16)
+                    }
+                }
+                .padding(.horizontal, 24)
             } else {
-                // Guidance to face camera
-                FrontGuidanceView()
-                    .transition(.opacity)
+                Button(action: onStartReset) {
+                    Text("Start Reset")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(.white.opacity(0.82))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                }
+                .padding(.top, 4)
+
+                Button(action: onSkip) {
+                    Text("Skip")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(.white.opacity(0.7))
+                        .lineLimit(1)
+                }
             }
         }
         .padding(.bottom, 40)
+    }
+
+    private var headerIcon: String {
+        switch presentation.phase {
+        case .detecting:
+            return "iphone.gen3"
+        case .aligned:
+            return "checkmark.circle"
+        case .holding:
+            return "timer"
+        case .timeout:
+            return "arrow.clockwise.circle"
+        }
+    }
+
+    private var headerColor: Color {
+        switch presentation.phase {
+        case .detecting:
+            return .cyan
+        case .aligned:
+            return .cyan
+        case .holding:
+            return .green
+        case .timeout:
+            return .orange
+        }
     }
 }
 

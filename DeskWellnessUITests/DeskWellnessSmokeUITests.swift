@@ -70,6 +70,10 @@ final class DeskWellnessSmokeUITests: XCTestCase {
         XCTAssertTrue(optionalCheckIn.waitForExistence(timeout: timeout))
         optionalCheckIn.tap()
 
+        let continueButton = app.buttons["Continue"]
+        XCTAssertTrue(continueButton.waitForExistence(timeout: timeout))
+        continueButton.tap()
+
         let alert = app.alerts["Camera Access Required"]
         XCTAssertTrue(alert.waitForExistence(timeout: timeout))
         XCTAssertTrue(alert.buttons["Not Now"].exists)
@@ -89,9 +93,29 @@ final class DeskWellnessSmokeUITests: XCTestCase {
         XCTAssertTrue(optionalCheckIn.waitForExistence(timeout: timeout))
         optionalCheckIn.tap()
 
+        let continueButton = app.buttons["Continue"]
+        XCTAssertTrue(continueButton.waitForExistence(timeout: timeout))
+        continueButton.tap()
+
         let alert = app.alerts["Camera Access Required"]
         XCTAssertTrue(alert.waitForExistence(timeout: timeout))
         XCTAssertTrue(alert.buttons["Not Now"].exists)
         XCTAssertTrue(alert.buttons["Open Settings"].exists)
+    }
+
+    @MainActor
+    func testOptionalCheckInShowsPreScanSetupScreen() {
+        let app = XCUIApplication()
+        app.launchArguments += ["-ResetMinuteSkipOnboarding"]
+        app.launch()
+
+        let optionalCheckIn = app.buttons["home_optional_check_in"]
+        XCTAssertTrue(optionalCheckIn.waitForExistence(timeout: timeout))
+        optionalCheckIn.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["checkin_setup_screen"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.buttons["Continue"].exists)
+        XCTAssertTrue(app.buttons["Start Reset"].exists)
+        XCTAssertTrue(app.buttons["Skip"].exists)
     }
 }

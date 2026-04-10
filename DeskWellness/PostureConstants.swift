@@ -45,7 +45,10 @@ enum PostureConstants {
     // MARK: - Timing
     
     /// Duration (seconds) of stable tracking before auto-finishing scan
-    static let scanLockDuration: Double = 5.0
+    static let scanLockDuration: Double = 3.0
+
+    /// Maximum time (seconds) to wait before offering retry instead of endless scanning.
+    static let frontScanTimeoutDuration: Double = 12.0
     
     /// Minimum interval (seconds) between speech prompts
     static let speechDebounceInterval: TimeInterval = 5.0
